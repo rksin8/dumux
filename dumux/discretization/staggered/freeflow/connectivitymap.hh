@@ -80,11 +80,6 @@ public:
                 // handle the cell center dof stencils first
                 const auto dofIdxCellCenter = gridGeometry.elementMapper().index(element);
 
-                // the stencil for cell center dofs w.r.t. to other cell center dofs,
-                // includes all neighboring element indices
-                if (!scvf.boundary())
-                    cellCenterToCellCenterMap_[dofIdxCellCenter].push_back(scvf.outsideScvIdx());
-
                 // the stencil for cell center dofs w.r.t. face dofs, includes the face dof indices of the current element
                 cellCenterToFaceMap_[dofIdxCellCenter].push_back(scvf.dofIndex());
 
@@ -133,16 +128,6 @@ private:
     {
         const auto eIdx = scvf.insideScvIdx();
         stencil.push_back(eIdx);
-
-        for (const auto& data : scvf.pairData())
-        {
-            auto& lateralFace = fvGeometry.scvf(eIdx, data.localLateralFaceIdx);
-            if (!lateralFace.boundary())
-            {
-                const auto firstParallelElementDofIdx = lateralFace.outsideScvIdx();
-                stencil.push_back(firstParallelElementDofIdx);
-            }
-        }
     }
 
     /*

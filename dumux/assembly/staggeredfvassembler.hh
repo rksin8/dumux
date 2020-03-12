@@ -70,6 +70,14 @@ public:
     using GridVariables = GetPropType<TypeTag, Properties::GridVariables>;
     using CouplingManager = typename ParentType::CouplingManager;
 
+    using CellCenterSolutionVector = typename GET_PROP_TYPE(TypeTag, CellCenterSolutionVector);
+    using FaceSolutionVector = typename GET_PROP_TYPE(TypeTag, FaceSolutionVector);
+
+    using CCToCCMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockCCToCC;
+    using CCToFaceMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockCCToFace;
+    using FaceToCCMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockFaceToCC;
+    using FaceToFaceMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockFaceToFace;
+
     //! The constructor for stationary problems
     StaggeredFVAssembler(std::shared_ptr<const Problem> problem,
                          std::shared_ptr<const GridGeometry> gridGeometry,
@@ -108,6 +116,8 @@ public:
     const GridGeometry& gridGeometry() const
     { return ParentType::gridGeometry(Dune::index_constant<0>()).actualGridGeometry(); }
 
+    const auto& problem() const
+    { return ParentType::problem(Dune::index_constant<0>()); }
 };
 
 } // namespace Dumux

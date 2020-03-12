@@ -59,9 +59,11 @@ class PDESolver
 
 public:
     PDESolver(std::shared_ptr<Assembler> assembler,
-              std::shared_ptr<LinearSolver> linearSolver)
+              std::shared_ptr<LinearSolver> linearSolver,
+              std::shared_ptr<LinearSolver> linearSolver2)
     : assembler_(assembler)
     , linearSolver_(linearSolver)
+    , linearSolver2_(linearSolver2)
     {}
 
     virtual ~PDESolver() = default;
@@ -107,8 +109,20 @@ protected:
     /*!
      * \brief Access the linear solver
      */
+    const LinearSolver& linearSolver2() const
+    { return *linearSolver2_; }
+
+    /*!
+     * \brief Access the linear solver
+     */
     LinearSolver& linearSolver()
     { return *linearSolver_; }
+
+    /*!
+     * \brief Access the linear solver
+     */
+    LinearSolver& linearSolver2()
+    { return *linearSolver2_; }
 
     /*!
      * \brief Helper function to assure the MultiTypeBlockMatrix's sub-blocks have the correct sizes.
@@ -134,6 +148,7 @@ protected:
 private:
     std::shared_ptr<Assembler> assembler_;
     std::shared_ptr<LinearSolver> linearSolver_;
+    std::shared_ptr<LinearSolver> linearSolver2_;
 };
 
 } // namespace Dumux

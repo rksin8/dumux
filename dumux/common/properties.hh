@@ -235,6 +235,12 @@ template<class TypeTag, class MyTypeTag>
 struct EnableGridFaceVariablesCache { using type = UndefinedProperty; };        //!< Switch on/off caching of face variables
 template<class TypeTag, class MyTypeTag>
 struct UpwindSchemeOrder { using type = UndefinedProperty; };                   //!< Specifies the order of the upwinding scheme (1 == first order, 2 == second order(tvd methods))
+template<class TypeTag, class MyTypeTag>
+struct SimpleMassBalanceSummands { using type = UndefinedProperty; };
+template<class TypeTag, class MyTypeTag>
+struct SimpleMomentumBalanceSummands { using type = UndefinedProperty; };
+template<class TypeTag, class MyTypeTag>
+struct SimpleMomentumBalanceSummandsVector { using type = UndefinedProperty; };
 
 /////////////////////////////////////////////////////////////
 // Properties used by the mpnc model

@@ -165,6 +165,7 @@ public:
       boundary_(is.boundary()),
       axisData_(geometryHelper.axisData()),
       pairData_(std::move(geometryHelper.pairData())),
+      localIdxOpposingFace_(geometryHelper.localIdxOpposingFace()),
       localFaceIdx_(geometryHelper.localFaceIndex()),
       dirIdx_(geometryHelper.directionIndex()),
       outerNormalSign_(sign(unitOuterNormal_[directionIndex()])),
@@ -243,6 +244,12 @@ public:
     const Geometry geometry() const
     {
         return Geometry(geomType_, corners_);
+    }
+
+    //! The local index of the opposing face
+    GridIndexType localIdxOpposingFace() const
+    {
+        return localIdxOpposingFace_;
     }
 
     //! The local index of this sub control volume face
@@ -424,6 +431,7 @@ private:
     AxisData axisData_;
     std::array<PairData, numPairs> pairData_;
 
+    int localIdxOpposingFace_;
     int localFaceIdx_;
     unsigned int dirIdx_;
     int outerNormalSign_;

@@ -1,27 +1,28 @@
 // -*- tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 // vi: set et ts=4 sw=2 sts=2:
-#ifndef DUNE_ISTL_MATRIXINDEXSET_HH
-#define DUNE_ISTL_MATRIXINDEXSET_HH
+#ifndef DUMUX_SIMPLEMATRIXINDEXSET_HH
+#define DUMUX_SIMPLEMATRIXINDEXSET_HH
 
 #include <vector>
 #include <set>
 
 namespace Dune {
 
+//TODO: figure out how to handle this copy from Dune
 
   /** \brief Stores the nonzero entries in a sparse matrix */
-  class MatrixIndexSet
+  class SimpleMatrixIndexSet
   {
 
   public:
     typedef std::size_t size_type;
 
     /** \brief Default constructor */
-    MatrixIndexSet() : rows_(0), cols_(0)
+    SimpleMatrixIndexSet() : rows_(0), cols_(0)
     {}
 
     /** \brief Constructor setting the matrix size */
-    MatrixIndexSet(size_type rows, size_type cols) : rows_(rows), cols_(cols) {
+    SimpleMatrixIndexSet(size_type rows, size_type cols) : rows_(rows), cols_(cols) {
       indices_.resize(rows_);
     }
 
@@ -77,6 +78,18 @@ namespace Dune {
 
       }
 
+    }
+
+    void getIndices(std::vector<std::set<size_type> >& indicesParam) const {
+        indicesParam = indices_;
+    }
+
+    void setIndices(const std::vector<std::set<size_type> >& indicesParam){
+        indices_ = indicesParam;
+    }
+
+    std::vector<std::set<size_type> >* getPtrToIndices(){
+        return &indices_;
     }
 
     /** \brief Initializes a BCRSMatrix with the indices contained

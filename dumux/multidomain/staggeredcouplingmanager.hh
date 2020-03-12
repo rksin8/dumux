@@ -29,6 +29,7 @@
 #include <dumux/assembly/numericepsilon.hh>
 #include <dumux/common/indextraits.hh>
 #include <dumux/discretization/method.hh>
+#include <dumux/assembly/simpleassemblystructs.hh>
 
 namespace Dumux {
 
@@ -51,6 +52,9 @@ class StaggeredCouplingManager: virtual public CouplingManager<MDTraits>
 
     using GridIndexType = typename IndexTraits< GridView<0> >::GridIndex;
     using CouplingStencil = std::vector<GridIndexType>;
+
+    using SimpleMassBalanceSummands = typename LocalResidual::SimpleMassBalanceSummands;
+    using SimpleMomentumBalanceSummands = typename LocalResidual::SimpleMomentumBalanceSummands;
 
 public:
 
@@ -149,10 +153,11 @@ public:
     decltype(auto) evalCouplingResidual(Dune::index_constant<cellCenterIdx> domainI,
                                         const LocalAssemblerI& localAssemblerI,
                                         Dune::index_constant<j> domainJ,
-                                        std::size_t dofIdxGlobalJ) const
+                                        std::size_t dofIdxGlobalJ,
+                                        SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         static_assert(domainI != domainJ, "Domain i cannot be coupled to itself!");
-        return localAssemblerI.evalLocalResidualForCellCenter();
+        return localAssemblerI.evalLocalResidualForCellCenter(simpleMassBalanceSummands);
     }
 
      /*!
@@ -176,10 +181,11 @@ public:
                                         const SubControlVolumeFace& scvfI,
                                         const LocalAssemblerI& localAssemblerI,
                                         Dune::index_constant<j> domainJ,
-                                        std::size_t dofIdxGlobalJ) const
+                                        std::size_t dofIdxGlobalJ,
+                                        SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         static_assert(domainI != domainJ, "Domain i cannot be coupled to itself!");
-        return localAssemblerI.evalLocalResidualForFace(scvfI);
+        return localAssemblerI.evalLocalResidualForFace(scvfI, simpleMomentumBalanceSummands);
     }
 
     /*!
