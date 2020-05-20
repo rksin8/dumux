@@ -38,7 +38,7 @@
 #include <dumux/common/dumuxmessage.hh>
 #include <dumux/common/parameters.hh>
 #include <dumux/common/properties.hh>
-#include <dumux/io/grid/gridmanager_yasp.hh>
+#include <dumux/io/grid/gridmanager_sub.hh>
 #include <dumux/io/staggeredvtkoutputmodule.hh>
 #include <dumux/linear/seqsolverbackend.hh>
 #include <dumux/nonlinear/newtonsolver.hh>
@@ -63,9 +63,39 @@ int main(int argc, char** argv) try
     // parse command line arguments and input file
     Parameters::init(argc, argv);
 
-    // try to create a grid (from the given grid file or the input file)
-    GridManager<GetPropType<TypeTag, Properties::Grid>> gridManager;
-    gridManager.init();
+    using GridView = typename GetPropType<TypeTag, Properties::GridGeometry>::GridView;
+    using Element = typename GridView::template Codim<0>::Entity;
+    using GlobalPosition = typename Element::Geometry::GlobalCoordinate;
+
+    // create a grid
+    auto selector = [&](const auto& element)
+    {
+        static const bool isStairGeometry = getParam<bool>("Problem.IsStairGeometry", false);
+        if (!isStairGeometry)
+            return true;
+
+        GlobalPosition globalPos = element.geometry().center();
+
+        double eps = 1e-12;
+        const double arg = (((globalPos[0])/2));
+        GlobalPosition lowerLeft = getParam<GlobalPosition>("Grid.LowerLeft");
+
+        const bool inForm = (globalPos[0] > - eps && globalPos[0] < 2. + eps);
+        const bool isBelowCurve = globalPos[1] < ((arg - std::floor(arg)) + lowerLeft[1] + eps);
+
+        if (globalPos[1] < lowerLeft[1] + eps)
+            return false;
+        else if (globalPos[1] > (lowerLeft[1] + 1. - eps))
+            return true;
+        else if (inForm)
+            return isBelowCurve ? false : true;
+        else
+            return true;
+    };
+
+    using HostGrid = typename GetProp<TypeTag, Properties::Grid>::HostGrid;
+    Dumux::GridManager<Dune::SubGrid<GridView::dimension, HostGrid>> gridManager;
+    gridManager.init(selector, "Internal");
 
     ////////////////////////////////////////////////////////////
     // run instationary non-linear problem on this grid
