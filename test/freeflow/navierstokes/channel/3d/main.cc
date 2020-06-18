@@ -39,7 +39,7 @@
 #include <dumux/common/parameters.hh>
 #include <dumux/common/properties.hh>
 #include <dumux/freeflow/navierstokes/staggered/fluxoversurface.hh>
-#include <dumux/io/grid/gridmanager.hh>
+#include <dumux/io/grid/gridmanager_sub.hh>
 #include <dumux/io/staggeredvtkoutputmodule.hh>
 #include <dumux/linear/seqsolverbackend.hh>
 #include <dumux/nonlinear/newtonsolver.hh>
@@ -63,9 +63,34 @@ int main(int argc, char** argv) try
     // parse command line arguments and input file
     Parameters::init(argc, argv);
 
-    // try to create a grid (from the given grid file or the input file)
-    GridManager<GetPropType<TypeTag, Properties::Grid>> gridManager;
-    gridManager.init();
+    // create a grid
+    using Scalar = GetPropType<TypeTag, Properties::Scalar>;
+    using GridView = typename GetPropType<TypeTag, Properties::GridGeometry>::GridView;
+    using Element = typename GridView::template Codim<0>::Entity;
+    using GlobalPosition = typename Element::Geometry::GlobalCoordinate;
+
+    auto selector = [&](const auto& element)
+    {
+        static const bool isStairGeometry = getParam<bool>("Problem.IsStairGeometry", false);
+        if (!isStairGeometry)
+            return true;
+
+        Scalar deltaX = 0.003;
+        Scalar deltaZ = 0.000075;
+        Scalar deltaY = 0.0003;
+
+        double eps = 1e-8;
+        GlobalPosition globalPos = element.geometry().center();
+
+        if (globalPos[2] > (deltaZ/deltaX * globalPos[0] + deltaZ/deltaY * globalPos[1] - deltaZ + eps))
+            return true;
+        else
+            return false;
+    };
+
+    using HostGrid = typename GetProp<TypeTag, Properties::Grid>::HostGrid;
+    Dumux::GridManager<Dune::SubGrid<GridView::dimension, HostGrid>> gridManager;
+    gridManager.init(selector, "Internal");
 
     ////////////////////////////////////////////////////////////
     // run instationary non-linear problem on this grid
@@ -118,7 +143,6 @@ int main(int argc, char** argv) try
                     GetPropType<TypeTag, Properties::ModelTraits>,
                     GetPropType<TypeTag, Properties::LocalResidual>> flux(*gridVariables, x);
     using GridView = typename GetPropType<TypeTag, Properties::GridGeometry>::GridView;
-    using Scalar = GetPropType<TypeTag, Properties::Scalar>;
     using GlobalPosition = Dune::FieldVector<Scalar, GridView::dimensionworld>;
 
     const Scalar xMin = gridGeometry->bBoxMin()[0];
