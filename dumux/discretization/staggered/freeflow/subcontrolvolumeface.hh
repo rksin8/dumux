@@ -318,6 +318,51 @@ public:
         return pairData(localSubFaceIdx).hasParallelNeighbor[parallelDegreeIdx];
     }
 
+    /*!
+    * \brief Check if the face has a half parallel neighbor
+    *
+    * \param localSubFaceIdx The local index of the subface
+    *
+    * ------------
+    * |          |
+    * |          |
+    * |          |
+    * -----------------------
+    * | yyyyyyyy s          |
+    * | yyyyyyyy s          |
+    * | yyyyyyyy s          |
+    * -----------------------
+    * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
+    * 'halfParallelNeighbor'. This means it has a parallel neighbor itself, but the subcontrolvolumeface that has
+    * the same dofIndex does not.
+    */
+    bool hasHalfParallelNeighbor(const int localSubFaceIdx) const
+    {
+        return pairData(localSubFaceIdx).hasHalfParallelNeighbor;
+    }
+
+    /*!
+    * \brief Check if the face has a corner parallel neighbor
+    *
+    * \param localSubFaceIdx The local index of the subface
+    *
+    * ------------
+    * | yyyyyyyy s
+    * | yyyyyyyy s
+    * | yyyyyyyy s
+    * -----------------------
+    * |          |          |
+    * |          |          |
+    * |          |          |
+    * -----------------------
+    * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
+    * 'cornerParallelNeighbor'.
+    */
+    bool hasCornerParallelNeighbor(const int localSubFaceIdx) const
+    {
+        return pairData(localSubFaceIdx).hasCornerParallelNeighbor;
+    }
+
    /*!
     * \brief Check if the face has an outer normal neighbor
     *

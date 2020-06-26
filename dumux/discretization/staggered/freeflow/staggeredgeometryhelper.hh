@@ -39,6 +39,31 @@ namespace Detail {
 /*!
  * \ingroup StaggeredDiscretization
  * \brief Parallel Data stored per sub face
+ *
+ * ------------
+ * |          |
+ * |          |
+ * |          |
+ * -----------------------
+ * | yyyyyyyy s          |
+ * | yyyyyyyy s          |
+ * | yyyyyyyy s          |
+ * -----------------------
+ * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
+ * 'halfParallelNeighbor'. This means it has a parallel neighbor itself, but the subcontrolvolumeface that
+ * has the same dofIndex does not.
+ *
+ * ------------
+ * | yyyyyyyy s
+ * | yyyyyyyy s
+ * | yyyyyyyy s
+ * -----------------------
+ * |          |          |
+ * |          |          |
+ * |          |          |
+ * -----------------------
+ * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
+ * 'cornerParallelNeighbor'.
  */
 template<class GridView, int upwindSchemeOrder>
 struct PairData
@@ -49,6 +74,8 @@ struct PairData
     using SmallLocalIndexType = typename IndexTraits<GridView>::SmallLocalIndex;
 
     std::bitset<upwindSchemeOrder> hasParallelNeighbor;
+    bool hasHalfParallelNeighbor = false;
+    bool hasCornerParallelNeighbor = false;
     std::array<GridIndexType, upwindSchemeOrder> parallelDofs;
     std::array<Scalar, upwindSchemeOrder> parallelCellWidths;
     bool hasOuterLateral = false;
@@ -378,6 +405,69 @@ private:
                     // recursively insert parallel neighbor faces into pair data
                     const auto parallelAxisIdx = directionIndex(intersection);
                     const auto localLateralIntersectionIndex = intersection.indexInInside();
+
+//       ------------
+//       |          |
+//       |          |
+//       |          |
+//       iiiiiiiiiii*bbbbbbbbbbb
+//       |          o zzzzzzzz |
+//       |          o zzzzzzzz |
+//       |          o zzzzzzzz |
+//       -----------------------
+//
+//       i:intersection,o:intersection_, b: outerIntersection, z: intersection_.outside()
+                        if (intersection_.neighbor())
+                        {
+                            for (const auto& outerIntersection : intersections(gridView_, intersection_.outside()))
+                            {
+                                if (intersection.indexInInside() == outerIntersection.indexInInside())
+                                {
+                                    if (!outerIntersection.neighbor())
+                                    {
+                                        pairData_[numPairParallelIdx].hasHalfParallelNeighbor = true;
+                                    }
+                                }
+                            }
+                        }
+
+//       ------------
+//       |          o
+//       |          o
+//       |          o
+//       -----------------------
+//       |          |          |
+//       |          |          |
+//       |          |          |
+//       -----------------------
+//
+//       o:intersection_
+//       ------------
+//       |          o
+//       |          o
+//       |          o
+//       iiiiiiiiiii------------
+//       | zzzzzzzz b          |
+//       | zzzzzzzz b          |
+//       | zzzzzzzz b          |
+//       -----------------------
+//
+//       i:intersection,o:intersection_, b: outerIntersection, z: intersection.outside()
+                        if (!intersection_.neighbor())
+                        {
+                            for (const auto& outerIntersection : intersections(gridView_, intersection.outside()))
+                            {
+                                if (intersection_.indexInInside() == outerIntersection.indexInInside())
+                                {
+                                    if (outerIntersection.neighbor())
+                                    {
+                                        pairData_[numPairParallelIdx].hasCornerParallelNeighbor = true;
+                                    }
+                                }
+                            }
+                        }
+
+
                     addParallelNeighborPairData_(intersection.outside(), 0, localLateralIntersectionIndex, parallelLocalIdx, parallelAxisIdx, numPairParallelIdx);
                 }
 
