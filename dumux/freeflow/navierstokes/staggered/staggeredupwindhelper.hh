@@ -522,7 +522,7 @@ private:
         {
             return fvGeometry_.scvf(scvf_.outsideScvIdx(), scvf_.pairData(localSubFaceIdx).localLateralFaceIdx);
         }
-        else //scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
+        else if (scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
         {
 //      ------------
 //      | xxxxxxxx o
@@ -542,6 +542,10 @@ private:
             const auto& localLateralOppositeIdx =  (localLateralIdx % 2) ? (localLateralIdx - 1) : (localLateralIdx + 1);
 
             return fvGeometry_.scvf(parallelFace.outsideScvIdx(), localLateralOppositeIdx);
+        }
+        else
+        {
+            DUNE_THROW(Dune::InvalidStateException, "The function boundaryScvf_ should only be called when hasHalfParallelNeighbor or hasCornerParallelNeighbor.");
         }
     }
 
