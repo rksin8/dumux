@@ -418,18 +418,10 @@ private:
 //
 //       i:intersection,o:intersection_, b: outerIntersection, z: intersection_.outside()
                         if (intersection_.neighbor())
-                        {
                             for (const auto& outerIntersection : intersections(gridView_, intersection_.outside()))
-                            {
                                 if (intersection.indexInInside() == outerIntersection.indexInInside())
-                                {
                                     if (!outerIntersection.neighbor())
-                                    {
                                         pairData_[numPairParallelIdx].hasHalfParallelNeighbor = true;
-                                    }
-                                }
-                            }
-                        }
 
 //       ------------
 //       |          o
@@ -454,18 +446,10 @@ private:
 //
 //       i:intersection,o:intersection_, b: outerIntersection, z: intersection.outside()
                         if (!intersection_.neighbor())
-                        {
                             for (const auto& outerIntersection : intersections(gridView_, intersection.outside()))
-                            {
                                 if (intersection_.indexInInside() == outerIntersection.indexInInside())
-                                {
                                     if (outerIntersection.neighbor())
-                                    {
                                         pairData_[numPairParallelIdx].hasCornerParallelNeighbor = true;
-                                    }
-                                }
-                            }
-                        }
 
 
                     addParallelNeighborPairData_(intersection.outside(), 0, localLateralIntersectionIndex, parallelLocalIdx, parallelAxisIdx, numPairParallelIdx);
