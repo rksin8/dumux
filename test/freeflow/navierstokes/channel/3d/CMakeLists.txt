@@ -13,16 +13,16 @@ dumux_add_test(NAME test_ff_stokes_channel_3d_cuboid
                              -Problem.Name test_ff_stokes_channel_3d_cuboid"
                              --zeroThreshold {"velocity_liq \(m/s\)":1e-12})
 
-dumux_add_test(NAME test_ff_stokes_channel_3d_stair
+dumux_add_test(NAME test_ff_stokes_channel_3d_staircase
               TARGET test_ff_stokes_channel_3d
               LABELS freeflow navierstokes
               CMAKE_GUARD HAVE_UMFPACK
               COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
               CMD_ARGS       --script fuzzy
-                             --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_stokes_channel_3d_stair-reference.vtu
-                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_stokes_channel_3d_stair-00001.vtu
+                             --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_stokes_channel_3d_staircase-reference.vtu
+                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_stokes_channel_3d_staircase-00001.vtu
                              --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_stokes_channel_3d params.input
-                             -Problem.Name test_ff_stokes_channel_3d_stair -Problem.IsStairGeometry true"
+                             -Problem.Name test_ff_stokes_channel_3d_staircase -Problem.IsStaircaseGeometry true"
                              --zeroThreshold {"velocity_liq \(m/s\)":1e-12})
 
 dumux_add_test(NAME test_ff_stokes_channel_pseudo3d

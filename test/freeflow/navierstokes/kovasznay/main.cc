@@ -70,8 +70,8 @@ int main(int argc, char** argv) try
     // create a grid
     auto selector = [&](const auto& element)
     {
-        static const bool isStairGeometry = getParam<bool>("Problem.IsStairGeometry", false);
-        if (!isStairGeometry)
+        static const bool isStaircaseGeometry = getParam<bool>("Problem.IsStaircaseGeometry", false);
+        if (!isStaircaseGeometry)
             return true;
 
         GlobalPosition globalPos = element.geometry().center();

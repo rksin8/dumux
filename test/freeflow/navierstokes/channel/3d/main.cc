@@ -71,8 +71,8 @@ int main(int argc, char** argv) try
 
     auto selector = [&](const auto& element)
     {
-        static const bool isStairGeometry = getParam<bool>("Problem.IsStairGeometry", false);
-        if (!isStairGeometry)
+        static const bool isStaircaseGeometry = getParam<bool>("Problem.IsStaircaseGeometry", false);
+        if (!isStaircaseGeometry)
             return true;
 
         Scalar deltaX = 0.003;

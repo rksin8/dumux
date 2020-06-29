@@ -26,17 +26,17 @@ dumux_add_test(NAME test_ff_navierstokes_kovasznay_higherorder_cuboid
                              -Flux.TvdApproach Hou
                              -Flux.DifferencingScheme Vanleer")
 
-dumux_add_test(NAME test_ff_navierstokes_kovasznay_higherorder_stair
+dumux_add_test(NAME test_ff_navierstokes_kovasznay_higherorder_staircase
               TARGET test_ff_navierstokes_kovasznay_higherorder
               LABELS freeflow navierstokes
               CMAKE_GUARD HAVE_UMFPACK
               COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
               CMD_ARGS       --script fuzzy
-                             --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_navierstokes_kovasznay_higherorder_stair-reference.vtu
-                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay_higherorder_stair-00001.vtu
+                             --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_navierstokes_kovasznay_higherorder_staircase-reference.vtu
+                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay_higherorder_staircase-00001.vtu
                              --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay_higherorder params.input
-                             -Problem.Name test_ff_navierstokes_kovasznay_higherorder_stair
-                             -Problem.IsStairGeometry true
+                             -Problem.Name test_ff_navierstokes_kovasznay_higherorder_staircase
+                             -Problem.IsStaircaseGeometry true
                              -Flux.TvdApproach Hou
                              -Flux.DifferencingScheme Vanleer")
 
