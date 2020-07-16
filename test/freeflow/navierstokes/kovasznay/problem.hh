@@ -30,7 +30,10 @@
 #endif
 
 #include <dune/grid/yaspgrid.hh>
+
+#if HAVE_DUNE_SUBGRID
 #include <dune/subgrid/subgrid.hh>
+#endif
 
 #include <dumux/discretization/staggered/freeflow/properties.hh>
 
@@ -66,7 +69,12 @@ template<class TypeTag>
 struct Grid<TypeTag, TTag::KovasznayTest>
 {
     using HostGrid = Dune::YaspGrid<2, Dune::EquidistantOffsetCoordinates<GetPropType<TypeTag, Properties::Scalar>, 2> >;
+
+#if HAVE_DUNE_SUBGRID
     using type = Dune::SubGrid<HostGrid::dimension, HostGrid>;
+#else
+    using type = HostGrid;
+#endif
 };
 
 // Set the problem property
