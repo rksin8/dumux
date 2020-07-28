@@ -54,6 +54,8 @@ public:
     NavierStokesVelocityOutput(const std::string& paramGroup = "")
     {
         enableOutput_ = getParamFromGroup<bool>(paramGroup, "Vtk.AddVelocity", true);
+        isStructuredGrid_ = getParamFromGroup<bool>(paramGroup, "Vtk.IsStructuredGrid", true);
+        // TODO add check for structured quad grid
     }
 
     //! Returns whether to enable the velocity output or not
@@ -74,7 +76,7 @@ public:
                            const ElementFluxVarsCache& elemFluxVarsCache,
                            int phaseIdx) const override
     {
-        if constexpr (GridGeometry::discMethod == DiscretizationMethod::fcstaggered)
+        if (isStructuredGrid_)
             calculateVelocityVelocityForStructuredGrid_(velocity, element, fvGeometry, elemVolVars, elemFluxVarsCache, phaseIdx);
     }
 
@@ -102,6 +104,7 @@ static auto directionIndex_(Vector&& vector)
 }
 
 bool enableOutput_;
+bool isStructuredGrid_;
 
 };
 
