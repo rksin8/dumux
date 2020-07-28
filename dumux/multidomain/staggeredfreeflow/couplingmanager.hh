@@ -63,8 +63,6 @@ private:
     template<std::size_t id> using GridFluxVariablesCache = typename GridVariables<id>::GridFluxVariablesCache;
     template<std::size_t id> using Problem = GetPropType<SubDomainTypeTag<id>, Properties::Problem>;
     template<std::size_t id> using VolumeVariables = GetPropType<SubDomainTypeTag<id>, Properties::VolumeVariables>;
-    template<std::size_t id> using ProblemWeakPtr = std::weak_ptr<const Problem<id>>;
-    using Problems = typename Traits::template Tuple<ProblemWeakPtr>;
     using Scalar = typename Traits::Scalar;
     using SolutionVector = typename Traits::SolutionVector;
 
@@ -167,13 +165,17 @@ public:
                     const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
                     const SubControlVolumeFace<freeFlowMomentumIdx>& scvf) const
     {
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element);
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
         const auto& scv = (*scvs(momentumCouplingContext_[0].fvGeometry).begin());
 
         if constexpr (!getPropValue<SubDomainTypeTag<freeFlowMomentumIdx>, Properties::NormalizePressure>())
             return momentumCouplingContext_[0].curElemVolVars[scv].pressure();
         else
-            return momentumCouplingContext_[0].curElemVolVars[scv].pressure() - this->problem(freeFlowMassIdx).initial(element)[pressureIdx];
+        {
+            // The call to this->problem() is expensive because of std::weak_ptr (see base class) so we avoid it here.
+            const auto& problem = momentumCouplingContext_[0].curElemVolVars.gridVolVars().problem();
+            return momentumCouplingContext_[0].curElemVolVars[scv].pressure() - problem.initial(element)[pressureIdx];
+        }
     }
 
     /*!
@@ -185,7 +187,7 @@ public:
                    const bool considerPreviousTimeStep = false) const
     {
         assert(!(considerPreviousTimeStep && !isTransient_));
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element);
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
         const auto& insideMomentumScv = fvGeometry.scv(scvf.insideScvIdx());
         const auto& insideMassScv = momentumCouplingContext_[0].fvGeometry.scv(insideMomentumScv.elementIndex());
 
@@ -214,7 +216,7 @@ public:
                    const bool considerPreviousTimeStep = false) const
     {
         assert(!(considerPreviousTimeStep && !isTransient_));
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element);
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, scv.elementIndex());
         const auto& massScv = (*scvs(momentumCouplingContext_[0].fvGeometry).begin());
         return considerPreviousTimeStep ? momentumCouplingContext_[0].prevElemVolVars[massScv].density()
                                         : momentumCouplingContext_[0].curElemVolVars[massScv].density();
@@ -227,7 +229,7 @@ public:
                               const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
                               const SubControlVolumeFace<freeFlowMomentumIdx>& scvf) const
     {
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element);
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
 
         const auto& insideMomentumScv = fvGeometry.scv(scvf.insideScvIdx());
         const auto& insideMassScv = momentumCouplingContext_[0].fvGeometry.scv(insideMomentumScv.elementIndex());
@@ -253,8 +255,8 @@ public:
     VelocityVector faceVelocity(const Element<freeFlowMassIdx>& element,
                                 const SubControlVolumeFace<freeFlowMassIdx>& scvf) const
     {
-        bindCouplingContext(Dune::index_constant<freeFlowMassIdx>(), element);
-        const auto& scvJ = massAndEnergyCouplingContext_[0].fvGeometry.scv(scvf.index());
+        bindCouplingContext(Dune::index_constant<freeFlowMassIdx>(), element, scvf.insideScvIdx()/*eIdx*/);
+        const auto& scvJ = massAndEnergyCouplingContext_[0].fvGeometry.scv(scvf.index()/*corresponds to scvIdx of staggered*/);
 
         // create a unit normal vector oriented in positive coordinate direction
         auto velocity = scvf.unitOuterNormal();
@@ -363,8 +365,18 @@ public:
     void bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx> domainI,
                              const Element<freeFlowMomentumIdx>& elementI) const
     {
-        const auto eIdx = this->problem(freeFlowMomentumIdx).gridGeometry().elementMapper().index(elementI);
-        if (momentumCouplingContext_.empty() || momentumCouplingContext_[0].eIdx != eIdx)
+        // The call to this->problem() is expensive because of std::weak_ptr (see base class). Here we try to avoid it if possible.
+        if (momentumCouplingContext_.empty())
+            bindCouplingContext(domainI, elementI, this->problem(freeFlowMomentumIdx).gridGeometry().elementMapper().index(elementI));
+        else
+            bindCouplingContext(domainI, elementI, momentumCouplingContext_[0].fvGeometry.gridGeometry().elementMapper().index(elementI));
+    }
+
+    void bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx> domainI,
+                             const Element<freeFlowMomentumIdx>& elementI,
+                             const std::size_t eIdx) const
+    {
+        if (momentumCouplingContext_.empty() || eIdx != momentumCouplingContext_[0].eIdx)
         {
             auto fvGeometry = localView(this->problem(freeFlowMassIdx).gridGeometry());
             fvGeometry.bind(elementI);
@@ -386,8 +398,18 @@ public:
     void bindCouplingContext(Dune::index_constant<freeFlowMassIdx> domainI,
                              const Element<freeFlowMassIdx>& elementI) const
     {
-        const auto eIdx = this->problem(freeFlowMassIdx).gridGeometry().elementMapper().index(elementI);
-        if (massAndEnergyCouplingContext_.empty() || massAndEnergyCouplingContext_[0].eIdx != eIdx)
+        // The call to this->problem() is expensive because of std::weak_ptr (see base class). Here we try to avoid it if possible.
+        if (massAndEnergyCouplingContext_.empty())
+            bindCouplingContext(domainI, elementI, this->problem(freeFlowMassIdx).gridGeometry().elementMapper().index(elementI));
+        else
+            bindCouplingContext(domainI, elementI, massAndEnergyCouplingContext_[0].fvGeometry.gridGeometry().elementMapper().index(elementI));
+    }
+
+    void bindCouplingContext(Dune::index_constant<freeFlowMassIdx> domainI,
+                             const Element<freeFlowMassIdx>& elementI,
+                             const std::size_t eIdx) const
+    {
+        if (massAndEnergyCouplingContext_.empty() || eIdx != massAndEnergyCouplingContext_[0].eIdx)
         {
             auto fvGeometry = localView(this->problem(freeFlowMomentumIdx).gridGeometry());
             fvGeometry.bindElement(elementI);
@@ -396,7 +418,6 @@ public:
             massAndEnergyCouplingContext_.emplace_back(MassAndEnergyCouplingContext{std::move(fvGeometry), eIdx});
         }
     }
-
 
     /*!
      * \ingroup MultiDomain
