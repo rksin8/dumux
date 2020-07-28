@@ -85,7 +85,7 @@ class NavierStokesProblemImpl<TypeTag, DiscretizationMethod::fcstaggered> : publ
 public:
 
     //! Export the boundary types.
-    using BoundaryTypes = NavierStokesMomentumBoundaryTypes<ModelTraits::numEq()>;
+    using BoundaryTypes = NavierStokesMomentumBoundaryTypes<ModelTraits::dim()>;
 
     //! Export the NumEqVector type for setting boundary conditions. This differs from the NumEqVector type used in the assembly
     //! because there, only one equation per DOF (face) is considered while the type here provides one entry for each world dimension.
@@ -451,7 +451,7 @@ class NavierStokesProblemImpl<TypeTag, DiscretizationMethod::cctpfa> : public FV
 public:
 
     //! Export the boundary types.
-    using BoundaryTypes = BoundaryTypes<ModelTraits::numEq()>;
+    using BoundaryTypes = Dumux::BoundaryTypes<ModelTraits::numEq()>;
 
     //! Export the NumEqVector type for setting boundary conditions.
     using NumEqVector = GetPropType<TypeTag, Properties::NumEqVector>;
