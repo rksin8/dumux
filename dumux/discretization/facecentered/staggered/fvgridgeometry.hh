@@ -26,7 +26,7 @@
 
 #include <memory>
 
-#include <dumux/common/defaultmappertraits.hh>
+#include <dune/grid/common/scsgmapper.hh>
 #include <dumux/common/indextraits.hh>
 #include <dumux/common/intersectionmapper.hh>
 #include <dumux/common/math.hh>
@@ -61,10 +61,12 @@ inline static auto directionIndex(Vector&& vector)
  * \tparam the grid view type TODO docme
  */
 template<class GridView>
-struct FaceCenteredStaggeredDefaultGridGeometryTraits : public DefaultMapperTraits<GridView>
+struct FaceCenteredStaggeredDefaultGridGeometryTraits
 {
     using SubControlVolume = FaceCenteredStaggeredSubControlVolume<GridView>;
     using SubControlVolumeFace = FaceCenteredStaggeredSubControlVolumeFace<GridView>;
+    using ElementMapper = Dune::SingleCodimSingleGeomTypeMapper<GridView, 0>;
+    using VertexMapper = Dune::SingleCodimSingleGeomTypeMapper<GridView, GridView::dimension>;
     using IntersectionMapper = ConformingGridIntersectionMapper<GridView>;
     using GeometryHelper = FaceCenteredStaggeredGeometryHelper<GridView, typename GridView::Grid>;
 
