@@ -74,10 +74,27 @@ public:
      * \brief Constructor computes the bouding box of the entire domain, for e.g. setting boundary conditions
      * \param gridView the grid view on which to construct the grid geometry
      */
+    template<bool enable = std::is_same_v<ElementMapper, Dune::MultipleCodimMultipleGeomTypeMapper<GV>>, std::enable_if_t<enable, int> = 0>
     BaseGridGeometry(const GridView& gridView)
     : gridView_(gridView)
     , elementMapper_(gridView, Dune::mcmgElementLayout())
     , vertexMapper_(gridView, Dune::mcmgVertexLayout())
+    , bBoxMin_(std::numeric_limits<double>::max())
+    , bBoxMax_(-std::numeric_limits<double>::max())
+    {
+        computeGlobalBoundingBox_();
+    }
+
+    /*!
+     * \ingroup Discretization
+     * \brief Constructor computes the bouding box of the entire domain, for e.g. setting boundary conditions
+     * \param gridView the grid view on which to construct the grid geometry
+     */
+    template<bool enable = std::is_same_v<ElementMapper, Dune::MultipleCodimMultipleGeomTypeMapper<GV>>, std::enable_if_t<!enable, int> = 0>
+    BaseGridGeometry(const GridView& gridView)
+    : gridView_(gridView)
+    , elementMapper_(gridView)
+    , vertexMapper_(gridView)
     , bBoxMin_(std::numeric_limits<double>::max())
     , bBoxMax_(-std::numeric_limits<double>::max())
     {
