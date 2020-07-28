@@ -271,7 +271,7 @@ public:
         // Get the average velocity at the center of the element (i.e. the location of the staggered face).
         const Scalar transportingVelocity = (velocitySelf + velocityOpposite) * 0.5;
         const Scalar density = this->problem().density(this->element(), this->fvGeometry(), scvf);
-        const bool selfIsUpstream = scvf.directionSign() != sign(transportingVelocity);
+        const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
 
         // TODO use higher order helper
         static const auto upwindWeight = getParamFromGroup<Scalar>(problem.paramGroup(), "Flux.UpwindWeight");
