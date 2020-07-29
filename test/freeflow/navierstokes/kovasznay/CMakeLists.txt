@@ -30,7 +30,6 @@ dumux_add_test(NAME test_ff_navierstokes_kovasznay_higherorder_staircase
               TARGET test_ff_navierstokes_kovasznay_higherorder
               LABELS freeflow navierstokes
               CMAKE_GUARD HAVE_UMFPACK
-              CMAKE_GUARD HAVE_DUNE_SUBGRID
               COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
               CMD_ARGS       --script fuzzy
                              --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_navierstokes_kovasznay_higherorder_staircase-reference.vtu
