@@ -17,7 +17,6 @@ dumux_add_test(NAME test_ff_stokes_channel_3d_staircase
               TARGET test_ff_stokes_channel_3d
               LABELS freeflow navierstokes
               CMAKE_GUARD HAVE_UMFPACK
-              CMAKE_GUARD HAVE_DUNE_SUBGRID
               COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
               CMD_ARGS       --script fuzzy
                              --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_stokes_channel_3d_staircase-reference.vtu
