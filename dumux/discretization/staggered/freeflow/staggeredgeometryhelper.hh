@@ -408,45 +408,45 @@ private:
                     const auto parallelAxisIdx = directionIndex(intersection);
                     const auto localLateralIntersectionIndex = intersection.indexInInside();
 
-//       ------------
-//       |          |
-//       |          |
-//       |          |
-//       iiiiiiiiiii*bbbbbbbbbbb
-//       |          o zzzzzzzz |
-//       |          o zzzzzzzz |
-//       |          o zzzzzzzz |
-//       -----------------------
-//
-//       i:intersection,o:intersection_, b: outerIntersection, z: intersection_.outside()
+                        //       ------------
+                        //       |          |
+                        //       |          |
+                        //       |          |
+                        //       iiiiiiiiiii*bbbbbbbbbbb
+                        //       |          o zzzzzzzz |
+                        //       |          o zzzzzzzz |
+                        //       |          o zzzzzzzz |
+                        //       -----------------------
+                        //
+                        //       i:intersection,o:intersection_, b: outerIntersection, z: intersection_.outside()
                         if (intersection_.neighbor())
                             for (const auto& outerIntersection : intersections(gridView_, intersection_.outside()))
                                 if (intersection.indexInInside() == outerIntersection.indexInInside())
                                     if (!outerIntersection.neighbor())
                                         pairData_[numPairParallelIdx].hasHalfParallelNeighbor = true;
 
-//       ------------
-//       |          o
-//       |          o
-//       |          o
-//       -----------------------
-//       |          |          |
-//       |          |          |
-//       |          |          |
-//       -----------------------
-//
-//       o:intersection_
-//       ------------
-//       |          o
-//       |          o
-//       |          o
-//       iiiiiiiiiii------------
-//       | zzzzzzzz b          |
-//       | zzzzzzzz b          |
-//       | zzzzzzzz b          |
-//       -----------------------
-//
-//       i:intersection,o:intersection_, b: outerIntersection, z: intersection.outside()
+                        //       ------------
+                        //       |          o
+                        //       |          o
+                        //       |          o
+                        //       -----------------------
+                        //       |          |          |
+                        //       |          |          |
+                        //       |          |          |
+                        //       -----------------------
+                        //
+                        //       o:intersection_
+                        //       ------------
+                        //       |          o
+                        //       |          o
+                        //       |          o
+                        //       iiiiiiiiiii------------
+                        //       | zzzzzzzz b          |
+                        //       | zzzzzzzz b          |
+                        //       | zzzzzzzz b          |
+                        //       -----------------------
+                        //
+                        //       i:intersection,o:intersection_, b: outerIntersection, z: intersection.outside()
                         if (!intersection_.neighbor())
                             for (const auto& outerIntersection : intersections(gridView_, intersection.outside()))
                                 if (intersection_.indexInInside() == outerIntersection.indexInInside())

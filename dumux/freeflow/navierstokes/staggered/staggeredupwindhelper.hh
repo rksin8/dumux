@@ -524,17 +524,17 @@ private:
         }
         else if (scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
         {
-//      ------------
-//      | xxxxxxxx o
-//      | xxxxxxxx o
-//      | xxxxxxxx o
-//      lllllllllll-bbbbbbbbbbb
-//      | yyyyyyyy p          |
-//      | yyyyyyyy p          |
-//      | yyyyyyyy p          |
-//      -----------------------
-//
-//      o: scvf_, l: lateralFace, p: parallelFace, b: returned scvf, x: scvf_ inside scv, y: lateralFace outside scv
+            //      ------------
+            //      | xxxxxxxx o
+            //      | xxxxxxxx o
+            //      | xxxxxxxx o
+            //      lllllllllll-bbbbbbbbbbb
+            //      | yyyyyyyy p          |
+            //      | yyyyyyyy p          |
+            //      | yyyyyyyy p          |
+            //      -----------------------
+            //
+            //      o: scvf_, l: lateralFace, p: parallelFace, b: returned scvf, x: scvf_ inside scv, y: lateralFace outside scv
             const SubControlVolumeFace& lateralFace = fvGeometry_.scvf(scvf_.insideScvIdx(), scvf_.pairData(localSubFaceIdx).localLateralFaceIdx);
             const SubControlVolumeFace& parallelFace = fvGeometry_.scvf(lateralFace.outsideScvIdx(), scvf_.localFaceIdx());
 
