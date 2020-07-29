@@ -581,12 +581,16 @@ private:
         {
             return fvGeometry_.gridGeometry().element(scvf_.outsideScvIdx());
         }
-        else //scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
+        else if (scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
         {
             const SubControlVolumeFace& lateralFace = fvGeometry_.scvf(scvf_.insideScvIdx(), scvf_.pairData(localSubFaceIdx).localLateralFaceIdx);
             const SubControlVolumeFace& parallelFace = fvGeometry_.scvf(lateralFace.outsideScvIdx(), scvf_.localFaceIdx());
 
             return fvGeometry_.gridGeometry().element(parallelFace.outsideScvIdx());
+        }
+        else
+        {
+            DUNE_THROW(Dune::InvalidStateException, "When entering boundaryElement_ scvf_ should have either hasHalfParallelNeighbor or hasCornerParallelNeighbor true. Not the case here.");
         }
     }
 
