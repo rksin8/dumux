@@ -149,7 +149,8 @@ int main(int argc, char** argv) try
     const Scalar xMax = gridGeometry->bBoxMax()[0];
     const Scalar yMin = gridGeometry->bBoxMin()[1];
     const Scalar yMax = gridGeometry->bBoxMax()[1];
-#if DIM_3D
+
+#if GRID_DIM == 3
     const Scalar zMin = gridGeometry->bBoxMin()[2];
     const Scalar zMax = gridGeometry->bBoxMax()[2];
 #endif
@@ -160,7 +161,7 @@ int main(int argc, char** argv) try
     // In this case, we add half a cell-width to the x-position in order to make sure that
     // the cell faces lie on the plane. This assumes a regular cartesian grid.
     // The second plane is placed at the outlet of the channel.
-#if DIM_3D
+#if GRID_DIM == 3
     const auto p0inlet = GlobalPosition{xMin, yMin, zMin};
     const auto p1inlet = GlobalPosition{xMin, yMax, zMin};
     const auto p2inlet = GlobalPosition{xMin, yMin, zMax};
@@ -181,7 +182,7 @@ int main(int argc, char** argv) try
 
     const Scalar offsetX = (numCellsX % 2 == 0) ? 0.0 : 0.5*((xMax - xMin) / numCellsX);
 
-#if DIM_3D
+#if GRID_DIM == 3
     const auto p0middle = GlobalPosition{planePosMiddleX + offsetX, yMin, zMin};
     const auto p1middle = GlobalPosition{planePosMiddleX + offsetX, yMax, zMin};
     const auto p2middle = GlobalPosition{planePosMiddleX + offsetX, yMin, zMax};
@@ -194,7 +195,7 @@ flux.addSurface("middle", p0middle, p1middle);
 #endif
 
     // The second plane is placed at the outlet of the channel.
-#if DIM_3D
+#if GRID_DIM == 3
     const auto p0outlet = GlobalPosition{xMax, yMin, zMin};
     const auto p1outlet = GlobalPosition{xMax, yMax, zMin};
     const auto p2outlet = GlobalPosition{xMax, yMin, zMax};

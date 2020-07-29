@@ -40,10 +40,6 @@
 #include <dumux/material/components/constant.hh>
 #include <dumux/material/fluidsystems/1pliquid.hh>
 
-#ifndef DIM_3D
-#define DIM_3D 0
-#endif
-
 namespace Dumux {
 
 template <class TypeTag>
@@ -67,11 +63,8 @@ struct FluidSystem<TypeTag, TTag::ThreeDChannelTest>
 template<class TypeTag>
 struct Grid<TypeTag, TTag::ThreeDChannelTest>
 {
-    #if DIM_3D
-        static constexpr int dim = 3;
-    #else
-        static constexpr int dim = 2;
-    #endif
+    static constexpr int dim = GRID_DIM;
+
     using HostGrid = Dune::YaspGrid<dim, Dune::EquidistantOffsetCoordinates<GetPropType<TypeTag, Properties::Scalar>, dim> >;
     using type = Dune::SubGrid<HostGrid::dimension, HostGrid>;
 };
@@ -126,7 +119,7 @@ class ThreeDChannelTestProblem : public NavierStokesProblem<TypeTag>
     using PrimaryVariables = GetPropType<TypeTag, Properties::PrimaryVariables>;
     using NumEqVector = GetPropType<TypeTag, Properties::NumEqVector>;
 
-    static constexpr bool enablePseudoThreeDWallFriction = !DIM_3D;
+    static constexpr bool enablePseudoThreeDWallFriction = !(GRID_DIM == 3);
 
 public:
     ThreeDChannelTestProblem(std::shared_ptr<const GridGeometry> gridGeometry)
@@ -174,7 +167,7 @@ public:
     {
         auto source = NumEqVector(0.0);
 
-#if !DIM_3D
+#if GRID_DIM != 3
             static const Scalar height = getParam<Scalar>("Problem.Height");
             static const Scalar factor = getParam<Scalar>("Problem.PseudoWallFractionFactor", 8.0);
             source[scvf.directionIndex()] = this->pseudo3DWallFriction(scvf, elemVolVars, elemFaceVars, height, factor);
