@@ -83,10 +83,7 @@ int main(int argc, char** argv) try
         const double eps = 1e-8;
         GlobalPosition globalPos = element.geometry().center();
 
-        if (globalPos[2] > (deltaZ/deltaX * globalPos[0] + deltaZ/deltaY * globalPos[1] - deltaZ + eps))
-            return true;
-        else
-            return false;
+        return globalPos[2] > (deltaZ/deltaX * globalPos[0] + deltaZ/deltaY * globalPos[1] - deltaZ + eps);
     };
 
     using HostGrid = typename GetProp<TypeTag, Properties::Grid>::HostGrid;
