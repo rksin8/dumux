@@ -569,7 +569,7 @@ private:
     * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
     * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
     * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
-    * half-control volumes. In both cases, the returned boudnaryElement is the one marked by b.  It needs to be
+    * half-control volumes. In both cases, the returned boundaryElement is the one marked by b.  It needs to be
     * the same boundaryScvf returned for the sake of flux continuity.
     */
     const Element boundaryElement_(const int localSubFaceIdx) const
@@ -603,7 +603,7 @@ private:
     * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
     * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
     * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
-    * half-control volumes. In both cases, we check if the face bbb, part of the edge of element boudnaryElement,
+    * half-control volumes. In both cases, we check if the face bbb, part of the edge of element boundaryElement,
     * is a Dirichlet boundary.
     */
     const bool dirichletParallelNeighbor_(const int localSubFaceIdx) const
