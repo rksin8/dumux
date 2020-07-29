@@ -76,11 +76,11 @@ int main(int argc, char** argv) try
         if (!isStaircaseGeometry)
             return true;
 
-        Scalar deltaX = 0.003;
-        Scalar deltaZ = 0.000075;
-        Scalar deltaY = 0.0003;
+        const Scalar deltaX = 0.003;
+        const Scalar deltaZ = 0.000075;
+        const Scalar deltaY = 0.0003;
 
-        double eps = 1e-8;
+        const double eps = 1e-8;
         GlobalPosition globalPos = element.geometry().center();
 
         if (globalPos[2] > (deltaZ/deltaX * globalPos[0] + deltaZ/deltaY * globalPos[1] - deltaZ + eps))
