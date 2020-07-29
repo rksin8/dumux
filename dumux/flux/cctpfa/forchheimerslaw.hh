@@ -166,7 +166,8 @@ class CCTpfaForchheimersLaw<ScalarType, GridGeometry, /*isNetwork*/ false>
     //! state the type for the corresponding cache
     using Cache = TpfaForchheimersLawCache<ThisType, GridGeometry>;
 
-    /*! \brief Compute the advective flux using the Forchheimer equation
+    /*! \brief Compute the advective flux of a phase (in kg/s) across
+    *          the given sub-control volume face uing the Forchheimer equation.
     *
     * see e.g. Nield & Bejan: Convection in Porous Media \cite nield2006
     *
