@@ -520,7 +520,7 @@ private:
      * half-control volumes. In both cases, the returned boudnaryScvf is the one marked by b. It needs to be the
      * same boundaryScvf returned for the sake of flux continuity.
      */
-    const SubControlVolumeFace boundaryScvf_(const int localSubFaceIdx) const
+    const SubControlVolumeFace& boundaryScvf_(const int localSubFaceIdx) const
     {
         if (scvf_.hasHalfParallelNeighbor(localSubFaceIdx))
         {
@@ -575,7 +575,7 @@ private:
     * half-control volumes. In both cases, the returned boundaryElement is the one marked by b.  It needs to be
     * the same boundaryScvf returned for the sake of flux continuity.
     */
-    const Element boundaryElement_(const int localSubFaceIdx) const
+    Element boundaryElement_(const int localSubFaceIdx) const
     {
         if (scvf_.hasHalfParallelNeighbor(localSubFaceIdx))
         {
@@ -613,7 +613,7 @@ private:
     * half-control volumes. In both cases, we check if the face bbb, part of the edge of element boundaryElement,
     * is a Dirichlet boundary.
     */
-    const bool dirichletParallelNeighbor_(const int localSubFaceIdx) const
+    bool dirichletParallelNeighbor_(const int localSubFaceIdx) const
     {
         const auto& problem = elemVolVars_.gridVolVars().problem();
         const Element& boundaryElement = boundaryElement_(localSubFaceIdx);
@@ -640,7 +640,7 @@ private:
     * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
     * half-control volumes. In both cases, the returned velocity is situated in the corner (*).
     */
-    const Scalar getParallelVelocityFromCorner_(const int localSubFaceIdx) const
+    Scalar getParallelVelocityFromCorner_(const int localSubFaceIdx) const
     {
         const auto& problem = elemVolVars_.gridVolVars().problem();
         const Element& boundaryElement = boundaryElement_(localSubFaceIdx);
