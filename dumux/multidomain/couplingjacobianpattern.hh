@@ -186,16 +186,18 @@ Dune::MatrixIndexSet getCouplingJacobianPattern(const CouplingManager& couplingM
 
     for (const auto& elementI : elements(gridGeometryI.gridView()))
     {
-        const auto& stencil = couplingManager.couplingStencil(domainI, elementI, domainJ);
         auto fvGeometry = localView(gridGeometryI);
         fvGeometry.bindElement(elementI);
 
         for (const auto& scv : scvs(fvGeometry))
+        {
+            const auto& stencil = couplingManager.couplingStencil(domainI, elementI, scv, domainJ);
             for (const auto globalJ : stencil)
             {
                 assert(globalJ < gridGeometryJ.numDofs());
                 pattern.add(scv.dofIndex(), globalJ);
             }
+        }
     }
 
     return pattern;
