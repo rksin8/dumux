@@ -31,6 +31,10 @@
 #include <dune/common/float_cmp.hh>
 #include <dune/grid/yaspgrid.hh>
 
+#if HAVE_DUNE_SUBGRID
+#include <dune/subgrid/subgrid.hh>
+#endif
+
 #include <dumux/discretization/staggered/freeflow/properties.hh>
 
 #include <dumux/freeflow/navierstokes/boundarytypes.hh>
@@ -66,7 +70,12 @@ struct Grid<TypeTag, TTag::ThreeDChannelTest>
     static constexpr int dim = GRID_DIM;
 
     using HostGrid = Dune::YaspGrid<dim, Dune::EquidistantOffsetCoordinates<GetPropType<TypeTag, Properties::Scalar>, dim> >;
+
+#if HAVE_DUNE_SUBGRID
     using type = Dune::SubGrid<HostGrid::dimension, HostGrid>;
+#else
+    using type = HostGrid;
+#endif
 };
 
 // Set the problem property

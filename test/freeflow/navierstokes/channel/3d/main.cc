@@ -40,6 +40,7 @@
 #include <dumux/common/properties.hh>
 #include <dumux/freeflow/navierstokes/staggered/fluxoversurface.hh>
 #include <dumux/io/grid/gridmanager_sub.hh>
+#include <dumux/io/grid/gridmanager_yasp.hh>
 #include <dumux/io/staggeredvtkoutputmodule.hh>
 #include <dumux/linear/seqsolverbackend.hh>
 #include <dumux/nonlinear/newtonsolver.hh>
@@ -86,9 +87,14 @@ int main(int argc, char** argv) try
         return globalPos[2] > (deltaZ/deltaX * globalPos[0] + deltaZ/deltaY * globalPos[1] - deltaZ + eps);
     };
 
-    using HostGrid = typename GetProp<TypeTag, Properties::Grid>::HostGrid;
-    Dumux::GridManager<Dune::SubGrid<GridView::dimension, HostGrid>> gridManager;
+    using Grid = GetPropType<TypeTag, Properties::Grid>;
+    Dumux::GridManager<Grid> gridManager;
+
+#if HAVE_DUNE_SUBGRID
     gridManager.init(selector, "Internal");
+#else
+    gridManager.init();
+#endif
 
     ////////////////////////////////////////////////////////////
     // run instationary non-linear problem on this grid
