@@ -519,7 +519,7 @@ private:
      * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
      * half-control volumes. In both cases, the returned boudnaryScvf is the one marked by b. It needs to be the
      * same boundaryScvf returned for the sake of flux continuity.
-    */
+     */
     const SubControlVolumeFace boundaryScvf_(const int localSubFaceIdx) const
     {
         if (scvf_.hasHalfParallelNeighbor(localSubFaceIdx))
@@ -528,17 +528,20 @@ private:
         }
         else if (scvf_.hasCornerParallelNeighbor(localSubFaceIdx))
         {
-            //      ------------
-            //      | xxxxxxxx o
-            //      | xxxxxxxx o
-            //      | xxxxxxxx o
-            //      lllllllllll-bbbbbbbbbbb
-            //      | yyyyyyyy p          |
-            //      | yyyyyyyy p          |
-            //      | yyyyyyyy p          |
-            //      -----------------------
-            //
-            //      o: scvf_, l: lateralFace, p: parallelFace, b: returned scvf, x: scvf_ inside scv, y: lateralFace outside scv
+           /*
+            *      ------------
+            *      | xxxxxxxx o
+            *      | xxxxxxxx o
+            *      | xxxxxxxx o
+            *      lllllllllll-bbbbbbbbbbb
+            *      | yyyyyyyy p          |
+            *      | yyyyyyyy p          |
+            *      | yyyyyyyy p          |
+            *      -----------------------
+            *
+            * o: scvf_, l: lateralFace, p: parallelFace, b: returned scvf, x: scvf_ inside scv, y: lateralFace
+            * outside scv
+            */
             const SubControlVolumeFace& lateralFace = fvGeometry_.scvf(scvf_.insideScvIdx(), scvf_.pairData(localSubFaceIdx).localLateralFaceIdx);
             const SubControlVolumeFace& parallelFace = fvGeometry_.scvf(lateralFace.outsideScvIdx(), scvf_.localFaceIdx());
 
