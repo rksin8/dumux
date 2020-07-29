@@ -269,7 +269,7 @@ private:
      * |     yyyy o zzzz     |
      * -----------------------
      * If scvf_ is touching a corner, at which there is a Dirichlet condition for face b (half-control
-     * volumes x, y and z), the transported velocity at * exists and is taken. No upwinding or
+     * volumes x, y and z), the transported velocity at * is given. No upwinding or
      * higher-order approximation for the velocity at * are required. This also means the transported
      * velocity at * is the same for the half-control volumes y and z.
      *
