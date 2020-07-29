@@ -127,6 +127,49 @@ public:
 
     // \}
 
+    /*!
+     * \ingroup MultiDomain
+     * \brief evaluates the element residual of a coupled element of domain i which depends on the variables
+     *        at the degree of freedom with index dofIdxGlobalJ of domain j
+     *
+     * \param domainI the domain index of domain i
+     * \param localAssemblerI the local assembler assembling the element residual of an element of domain i
+     * \param domainJ the domain index of domain j
+     * \param dofIdxGlobalJ the index of the degree of freedom of domain j which has an influence on the element residual of domain i
+     *
+     * \note  the element whose residual is to be evaluated can be retrieved from the local assembler
+     *        as localAssemblerI.element() as well as all up-to-date variables and caches.
+     * \note  the default implementation evaluates the complete element residual
+     *        if only parts (i.e. only certain scvs, or only certain terms of the residual) of the residual are coupled
+     *        to dof with index dofIdxGlobalJ the function can be overloaded in the coupling manager
+     * \return the element residual
+     */
+    template<std::size_t j, class LocalAssemblerI>
+    decltype(auto) evalCouplingResidual(Dune::index_constant<freeFlowMomentumIdx> domainI,
+                                        const LocalAssemblerI& localAssemblerI,
+                                        const SubControlVolume<freeFlowMomentumIdx>& scvI,
+                                        Dune::index_constant<j> domainJ,
+                                        std::size_t dofIdxGlobalJ) const
+    {
+        const auto& problem = localAssemblerI.problem();
+        const auto& element = localAssemblerI.element();
+        const auto& fvGeometry = localAssemblerI.fvGeometry();
+        const auto& curElemVolVars = localAssemblerI.curElemVolVars();
+        const auto& prevElemVolVars = localAssemblerI.prevElemVolVars();
+        typename LocalAssemblerI::ElementResidualVector residual(localAssemblerI.element().subEntities(1));
+        const auto& localResidual = localAssemblerI.localResidual();
+
+        localResidual.evalSource(residual, problem, element, fvGeometry, curElemVolVars, scvI);
+
+        for (const auto& scvf : scvfs(fvGeometry, scvI))
+            localResidual.evalFlux(residual, problem, element, fvGeometry, curElemVolVars, localAssemblerI.elemBcTypes(), localAssemblerI.elemFluxVarsCache(), scvf);
+
+        if (isTransient_)
+            localResidual.evalStorage(residual, problem, element, fvGeometry, prevElemVolVars, curElemVolVars, scvI);
+
+        return residual;
+    }
+
 
     //! TODO: this is just a prototype. May be removed after some testing
     Scalar extrapolatedPressure(const Element<freeFlowMomentumIdx>& element,
@@ -303,24 +346,19 @@ public:
 
     /*!
      * \brief returns an iteratable container of all indices of degrees of freedom of domain j
-     *        that couple with / influence the element residual of the given element of domain i
+     *        that couple with / influence the residual of the given sub-control volume of domain i
      *
      * \param domainI the domain index of domain i
      * \param elementI the coupled element of domain í
+     * \param scvI the sub-control volume of domain i
      * \param domainJ the domain index of domain j
-     *
-     * \note  The element residual definition depends on the discretization scheme of domain i
-     *        box: a container of the residuals of all sub control volumes
-     *        cc : the residual of the (sub) control volume
-     *        fem: the residual of the element
-     * \note  This function has to be implemented by all coupling managers for all combinations of i and j
      */
     CouplingStencilType couplingStencil(Dune::index_constant<freeFlowMomentumIdx> domainI,
                                         const Element<freeFlowMomentumIdx>& elementI,
+                                        const SubControlVolume<freeFlowMomentumIdx>& scvI,
                                         Dune::index_constant<freeFlowMassIdx> domainJ) const
     {
-        const auto eIdx = this->problem(freeFlowMomentumIdx).gridGeometry().elementMapper().index(elementI);
-        return momentumToMassAndEnergyStencils_[eIdx];
+        return momentumToMassAndEnergyStencils_[scvI.index()];
     }
 
     /*!
@@ -376,7 +414,7 @@ public:
                              const Element<freeFlowMomentumIdx>& elementI,
                              const std::size_t eIdx) const
     {
-        if (momentumCouplingContext_.empty() || eIdx != momentumCouplingContext_[0].eIdx)
+        if (momentumCouplingContext_.empty())
         {
             auto fvGeometry = localView(this->problem(freeFlowMassIdx).gridGeometry());
             fvGeometry.bind(elementI);
@@ -390,8 +428,16 @@ public:
             if (isTransient_)
                 prevElemVolVars.bindElement(elementI, fvGeometry, *prevSol_);
 
-            momentumCouplingContext_.clear();
             momentumCouplingContext_.emplace_back(MomentumCouplingContext{std::move(fvGeometry), std::move(curElemVolVars), std::move(prevElemVolVars), eIdx});
+        }
+        else if (eIdx != momentumCouplingContext_[0].eIdx)
+        {
+            momentumCouplingContext_[0].eIdx = eIdx;
+            momentumCouplingContext_[0].fvGeometry.bind(elementI);
+            momentumCouplingContext_[0].curElemVolVars.bind(elementI, momentumCouplingContext_[0].fvGeometry, this->curSol());
+
+            if (isTransient_)
+                momentumCouplingContext_[0].prevElemVolVars.bindElement(elementI, momentumCouplingContext_[0].fvGeometry, *prevSol_);
         }
     }
 
@@ -409,13 +455,17 @@ public:
                              const Element<freeFlowMassIdx>& elementI,
                              const std::size_t eIdx) const
     {
-        if (massAndEnergyCouplingContext_.empty() || eIdx != massAndEnergyCouplingContext_[0].eIdx)
+        if (massAndEnergyCouplingContext_.empty())
         {
             auto fvGeometry = localView(this->problem(freeFlowMomentumIdx).gridGeometry());
             fvGeometry.bindElement(elementI);
 
-            massAndEnergyCouplingContext_.clear();
             massAndEnergyCouplingContext_.emplace_back(MassAndEnergyCouplingContext{std::move(fvGeometry), eIdx});
+        }
+        else if (eIdx != massAndEnergyCouplingContext_[0].eIdx)
+        {
+            massAndEnergyCouplingContext_[0].eIdx = eIdx;
+            massAndEnergyCouplingContext_[0].fvGeometry.bindElement(elementI);
         }
     }
 
@@ -556,41 +606,31 @@ public:
         massAndEnergyToMomentumStencils_.clear();
         massAndEnergyToMomentumStencils_.resize(momentumGridGeometry.gridView().size(0));
 
-        const auto& massAndEnergyGridGeometry = this->problem(freeFlowMassIdx).gridGeometry();
-        auto massAndEnergyFvGeometry = localView(massAndEnergyGridGeometry);
         momentumToMassAndEnergyStencils_.clear();
-        momentumToMassAndEnergyStencils_.resize(massAndEnergyGridGeometry.gridView().size(0));
-
+        momentumToMassAndEnergyStencils_.resize(momentumGridGeometry.numScv());
 
         for (const auto& element : elements(momentumGridGeometry.gridView()))
         {
             const auto eIdx = momentumGridGeometry.elementMapper().index(element);
             momentumFvGeometry.bindElement(element);
             for (const auto& scv : scvs(momentumFvGeometry))
+            {
                 massAndEnergyToMomentumStencils_[eIdx].push_back(scv.dofIndex());
+                momentumToMassAndEnergyStencils_[scv.index()].push_back(eIdx);
 
-            massAndEnergyFvGeometry.bindElement(element);
-            momentumToMassAndEnergyStencils_[eIdx].push_back(eIdx);
-
-            [[maybe_unused]] auto addOutsideElementDependencies = [&]()
-            {
-                for (const auto& scvf : scvfs(massAndEnergyFvGeometry))
-                    if (!scvf.boundary())
-                        momentumToMassAndEnergyStencils_[eIdx].push_back(scvf.outsideScvIdx());
-            };
-
-            // we always need the neighbor mass dofs in the momentum stencil in case of variable viscosity
-            if constexpr (!FluidSystem::viscosityIsConstant(0/*phaseIdx*/))
-            {
-                addOutsideElementDependencies();
-                continue;
-            }
-
-            // if intertia is considered, we need the neighbor mass dofs in the momentum stencil in case of variable density
-            if constexpr (FluidSystem::isCompressible(0/*phaseIdx*/))
-            {
-                if (this->problem(freeFlowMomentumIdx).enableInertiaTerms())
-                    addOutsideElementDependencies();
+                // extend the stencil for fluids with variable viscosity and density,
+                if constexpr (FluidSystem::isCompressible(0/*phaseIdx*/))
+                // if constexpr (FluidSystem::isCompressible(0/*phaseIdx*/) || !FluidSystem::viscosityIsConstant(0/*phaseIdx*/)) // TODO fix on master
+                {
+                    for (const auto& scvf : scvfs(momentumFvGeometry, scv))
+                    {
+                        if (scvf.isLateral() && !scvf.boundary())
+                        {
+                            const auto& outsideScv = momentumFvGeometry.scv(scvf.outsideScvIdx());
+                            momentumToMassAndEnergyStencils_[scv.index()].push_back(outsideScv.elementIndex());
+                        }
+                    }
+                }
             }
         }
     }
