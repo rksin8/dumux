@@ -332,9 +332,9 @@ public:
     * | yyyyyyyy s          |
     * | yyyyyyyy s          |
     * -----------------------
-    * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
-    * 'halfParallelNeighbor'. This means it has a parallel neighbor itself, but the subcontrolvolumeface that has
-    * the same dofIndex does not.
+    * In this corner geometry, hasParallelNeighbor will return true for subcontrolvolumeface s belonging to the
+    * element filled by 'y's, but hasParallelNeighbor will return false for the subcontrolvolumeface that has the
+    * same dofIndex. We name this situation hasHalfParallelNeighbor.
     */
     bool hasHalfParallelNeighbor(const int localSubFaceIdx) const
     {
@@ -355,8 +355,10 @@ public:
     * |          |          |
     * |          |          |
     * -----------------------
-    * In this corner geometry, subcontrolvolumeface s belonging to the element filled by 'y's has a
-    * 'cornerParallelNeighbor'.
+    * In this corner geometry, hasParallelNeighbor will return true for subcontrolvolumeface s belonging to the
+    * element filled by 'y's. However, as there also might be a boundary velocity value known at the corner, which
+    * can be used instead of the standard parallel velocity in some cases, we want to identify this situation. We
+    * name it cornerParallelNeighbor.
     */
     bool hasCornerParallelNeighbor(const int localSubFaceIdx) const
     {
