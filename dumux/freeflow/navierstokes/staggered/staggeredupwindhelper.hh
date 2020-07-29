@@ -288,7 +288,7 @@ private:
      * -----------------------
      * If the flux over face + is calculated and a corner occurs a bit further away (here upper right),
      * no special treatment of the corner geometry is provided. This means, the transported velocity at
-     * star (*) is gotten from an upwinding/a high order approximation. In particularly, this also means
+     * star (*) is obtained with an upwind scheme. In particularly, this also means
      * that while x and y see the same velocity * for the flux over face x (continuity OK), z sees
      * another velocity * for the flux over face ~ (continuity still OK, as only z and w have to use the
      * same velocity at *).
