@@ -449,7 +449,7 @@ public:
     void setCenter(const GlobalPosition& center)
     { center_ = center; }
 
-    //! set the boudnary flag
+    //! set the boundary flag
     void setBoundary(bool boundaryFlag)
     { boundary_ = boundaryFlag; }
 
