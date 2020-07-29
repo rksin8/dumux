@@ -69,9 +69,10 @@ int main(int argc, char** argv) try
     using Element = typename GridView::template Codim<0>::Entity;
     using GlobalPosition = typename Element::Geometry::GlobalCoordinate;
 
+    const bool isStaircaseGeometry = getParam<bool>("Problem.IsStaircaseGeometry", false);
+
     auto selector = [&](const auto& element)
     {
-        static const bool isStaircaseGeometry = getParam<bool>("Problem.IsStaircaseGeometry", false);
         if (!isStaircaseGeometry)
             return true;
 
