@@ -514,7 +514,11 @@ private:
      * |     yyyy o          |
      * -----------------------
      *
-     * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and | stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding half-control volumes. In both cases, the returned boudnaryScvf is the one marked by b. It needs to be the same boundaryScvf returned for the sake of flux continuity.
+     * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
+     * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
+     * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
+     * half-control volumes. In both cases, the returned boudnaryScvf is the one marked by b. It needs to be the
+     * same boundaryScvf returned for the sake of flux continuity.
     */
     const SubControlVolumeFace boundaryScvf_(const int localSubFaceIdx) const
     {
@@ -562,7 +566,11 @@ private:
     * |     yyyy o bbbbbbbb |
     * -----------------------
     *
-    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and | stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding half-control volumes. In both cases, the returned boudnaryElement is the one marked by b.  It needs to be the same boundaryScvf returned for the sake of flux continuity.
+    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
+    * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
+    * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
+    * half-control volumes. In both cases, the returned boudnaryElement is the one marked by b.  It needs to be
+    * the same boundaryScvf returned for the sake of flux continuity.
     */
     const Element boundaryElement_(const int localSubFaceIdx) const
     {
@@ -592,7 +600,11 @@ private:
     * |     yyyy o  element |
     * -----------------------
     *
-    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and | stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding half-control volumes. In both cases, we check if the face bbb, part of the edge of element boudnaryElement, is a Dirichlet boundary.
+    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
+    * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
+    * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
+    * half-control volumes. In both cases, we check if the face bbb, part of the edge of element boudnaryElement,
+    * is a Dirichlet boundary.
     */
     const bool dirichletParallelNeighbor_(const int localSubFaceIdx) const
     {
@@ -616,7 +628,10 @@ private:
     * |     yyyy o          |
     * -----------------------
     *
-    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and | stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding half-control volumes. In both cases, the returned velocity is situated in the corner (*).
+    * This function will be entered in such a corner geometry (there is no cell in the upper right, --- and |
+    * stand for the grid cells). The scvf_ will be one of the two ones denoted by o (upper one
+    * hasCornerParallelNeighbor, lower one hasHalfParallelNeighbor). x and y are the two possible corresponding
+    * half-control volumes. In both cases, the returned velocity is situated in the corner (*).
     */
     const Scalar getParallelVelocityFromCorner_(const int localSubFaceIdx) const
     {
