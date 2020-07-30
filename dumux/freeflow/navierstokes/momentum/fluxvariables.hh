@@ -32,7 +32,6 @@
 #include <dumux/common/parameters.hh>
 #include <dumux/common/properties.hh>
 
-#include <dumux/flux/fluxvariablesbase.hh>
 #include <dumux/discretization/method.hh>
 
 
@@ -47,10 +46,6 @@ namespace Dumux {
  */
 template<class TypeTag>
 class NavierStokesMomentumFluxVariables
-: public FluxVariablesBase<GetPropType<TypeTag, Properties::Problem>,
-                           typename GetPropType<TypeTag, Properties::GridGeometry>::LocalView,
-                           typename GetPropType<TypeTag, Properties::GridVolumeVariables>::LocalView,
-                           typename GetPropType<TypeTag, Properties::GridFluxVariablesCache>::LocalView>
 {
     using GridVariables = GetPropType<TypeTag, Properties::GridVariables>;
 
@@ -59,6 +54,7 @@ class NavierStokesMomentumFluxVariables
     using VolumeVariables = typename GridVolumeVariables::VolumeVariables;
 
     using GridFluxVariablesCache = typename GridVariables::GridFluxVariablesCache;
+    using ElementFluxVariablesCache = typename GridFluxVariablesCache::LocalView;
     using FluxVariablesCache = typename GridFluxVariablesCache::FluxVariablesCache;
 
     using GridGeometry = typename GridVariables::GridGeometry;
@@ -66,6 +62,7 @@ class NavierStokesMomentumFluxVariables
     using SubControlVolume = typename FVElementGeometry::SubControlVolume;
     using SubControlVolumeFace = typename FVElementGeometry::SubControlVolumeFace;
 
+    using ElementBoundaryTypes = GetPropType<TypeTag, Properties::ElementBoundaryTypes>;
 
     using Problem = GetPropType<TypeTag, Properties::Problem>;
     using GridView = typename GridGeometry::GridView;
@@ -79,8 +76,44 @@ class NavierStokesMomentumFluxVariables
 
     using NumEqVector = GetPropType<TypeTag, Properties::NumEqVector>;
 
-
 public:
+
+    NavierStokesMomentumFluxVariables(const Problem& problem,
+                                      const Element& element,
+                                      const FVElementGeometry& fvGeometry,
+                                      const SubControlVolumeFace& scvFace,
+                                      const ElementVolumeVariables& elemVolVars,
+                                      const ElementFluxVariablesCache& elemFluxVarsCache,
+                                      const ElementBoundaryTypes& elemBcTypes)
+    : problemPtr_(&problem)
+    , elementPtr_(&element)
+    , fvGeometryPtr_(&fvGeometry)
+    , scvFacePtr_(&scvFace)
+    , elemVolVarsPtr_(&elemVolVars)
+    , elemFluxVarsCachePtr_(&elemFluxVarsCache)
+    , elemBcTypesPtr_(&elemBcTypes)
+    {}
+
+    const Problem& problem() const
+    { return *problemPtr_; }
+
+    const Element& element() const
+    { return *elementPtr_; }
+
+    const SubControlVolumeFace& scvFace() const
+    { return *scvFacePtr_; }
+
+    const FVElementGeometry& fvGeometry() const
+    { return *fvGeometryPtr_; }
+
+    const ElementVolumeVariables& elemVolVars() const
+    { return *elemVolVarsPtr_; }
+
+    const ElementFluxVariablesCache& elemFluxVarsCache() const
+    { return *elemFluxVarsCachePtr_; }
+
+    const ElementBoundaryTypes& elemBcTypes() const
+    { return *elemBcTypesPtr_; }
 
     /*!
      * \brief Returns the diffusive momentum flux due to viscous forces
@@ -107,7 +140,7 @@ public:
             return lateralDiffusiveMomentumFlux();
     }
 
-        /*!
+    /*!
      * \brief Returns the frontal part of the momentum flux.
      *        This treats the flux over the staggered face at the center of an element,
      *        parallel to the current scvf where the velocity dof of interest lives.
@@ -117,11 +150,12 @@ public:
      *              ---------=======                 == and # staggered half-control-volume
      *              |       #      | current scv
      *              |       #      |                 # staggered face over which fluxes are calculated
-     *   vel.Opp <~~|       #~~>   x~~~~> vel.Self
+     *      vel.Opp |~~>    O~~~>  x~~~~> vel.Self
      *              |       #      |                 x dof position
-     *        scvf  |       #      |
+     *              |       #      |
      *              --------========                 -- element
      *                   scvf
+     *                                               O integration point
      * \endverbatim
      */
     NumEqVector frontalDiffusiveMomentumFlux() const
@@ -223,7 +257,7 @@ public:
         return result * scvf.area() * elemVolVars[scvf.insideScvIdx()].extrusionFactor();
     }
 
-            /*!
+    /*!
      * \brief Returns the frontal part of the momentum flux.
      *        This treats the flux over the staggered face at the center of an element,
      *        parallel to the current scvf where the velocity dof of interest lives.
@@ -233,11 +267,12 @@ public:
      *              ---------=======                 == and # staggered half-control-volume
      *              |       #      | current scv
      *              |       #      |                 # staggered face over which fluxes are calculated
-     *   vel.Opp <~~|       #~~>   x~~~~> vel.Self
+     *      vel.Opp |~~>    O~~~>  x~~~~> vel.Self
      *              |       #      |                 x dof position
-     *        scvf  |       #      |
+     *              |       #      |
      *              --------========                 -- element
      *                   scvf
+     *                                               O integration point
      * \endverbatim
      */
     NumEqVector pressureContribution() const
@@ -257,6 +292,24 @@ public:
         return result * scvf.area() * this->elemVolVars()[scvf.insideScvIdx()].extrusionFactor();
     }
 
+    /*!
+     * \brief Returns the frontal part of the momentum flux.
+     *        This treats the flux over the staggered face at the center of an element,
+     *        parallel to the current scvf where the velocity dof of interest lives.
+     *
+     * \verbatim
+     *                    scvf
+     *              ---------=======                 == and # staggered half-control-volume
+     *              |       #      | current scv
+     *              |       #      |                 # staggered face over which fluxes are calculated
+     *      vel.Opp |~~>    O~~~>  x~~~~> vel.Self
+     *              |       #      |                 x dof position
+     *              |       #      |
+     *              --------========                 -- element
+     *                   scvf
+     *                                               O integration point
+     * \endverbatim
+     */
     NumEqVector frontalAdvectiveMomentumFlux() const
     {
         NumEqVector flux(0.0);
@@ -281,6 +334,28 @@ public:
         return  transportingVelocity * transportedMomentum * scvf.directionSign() * scvf.area();
     }
 
+    /*!
+     * \brief Returns the advective momentum flux over the staggered face perpendicular to the scvf
+     *        where the velocity dof of interest lives (coinciding with the element's scvfs).
+     *
+     * \verbatim
+     *              ----------------
+     *              |              |
+     *              |    transp.   |
+     *              |      vel.    |~~~~> outer vel.
+     *              |       ^      |
+     *              |       |      |
+     *              ---------######O                 || and # staggered half-control-volume
+     *              |      ||      | scv
+     *              |      ||      |                 # lateral staggered faces over which fluxes are calculated
+     *              |      ||      x~~~~> inner vel.
+     *              |      ||      |                 x dof position
+     *              |      ||      |
+     *              ---------#######                -- elements
+     *
+     *                                               O integration point
+     * \endverbatim
+     */
     NumEqVector lateralAdvectiveMomentumFlux() const
     {
         NumEqVector flux(0.0);
@@ -291,23 +366,32 @@ public:
         const auto& elemVolVars = this->elemVolVars();
         const auto fvGeometry = this->fvGeometry();
 
-        // Get the transporting velocity, located at the scvf perpendicular to the current scvf where the dof
-        // of interest is located.
+        // get the transporting velocity which is perpendicular to our own (inner) velocity
         const Scalar transportingVelocity = [&]()
         {
+            // use the Dirichlet velocity as transporting velocity if the lateral face is on a Dirichlet boundary
+            if (scvf.boundary())
+            {
+                if (this->elemBcTypes()[scvf.localIndex()].isDirichlet(scvf.directionIndex()))
+                    return problem.dirichlet(this->element(), scvf)[scvf.directionIndex()];
+            }
+
             const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
-            const auto innerVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
-            const auto outerVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
+            const Scalar innerTransportingVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
 
             if (orthogonalScvf.boundary())
-                return 0.5 * (innerVelocity + outerVelocity);
-            else
             {
-                // average the transporting volume by weighting with the scv volumes
-                const auto insideVolume = fvGeometry.scv(orthogonalScvf.insideScvIdx()).volume();
-                const auto outsideVolume = fvGeometry.scv(orthogonalScvf.outsideScvIdx()).volume();
-                return (insideVolume*innerVelocity + outsideVolume*outerVelocity) / (insideVolume + outsideVolume);
+                if (this->elemBcTypes()[orthogonalScvf.localIndex()].isDirichlet(scvf.directionIndex()))
+                    return problem.dirichlet(this->element(), scvf)[scvf.directionIndex()];
+                else
+                    return innerTransportingVelocity; // fallback value, should actually never be called
             }
+
+            // average the transporting volume by weighting with the scv volumes
+            const auto insideVolume = fvGeometry.scv(orthogonalScvf.insideScvIdx()).volume();
+            const auto outsideVolume = fvGeometry.scv(orthogonalScvf.outsideScvIdx()).volume();
+            const auto outerTransportingVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
+            return (insideVolume*innerTransportingVelocity + outsideVolume*outerTransportingVelocity) / (insideVolume + outsideVolume);
         }();
 
         const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
@@ -327,82 +411,19 @@ public:
         return  transportingVelocity * transportedMomentum * scvf.directionSign() * scvf.area();
     }
 
+private:
+    const Problem* problemPtr_;                             //!< Pointer to the problem
+    const Element* elementPtr_;                             //!< Pointer to the element at hand
+    const FVElementGeometry* fvGeometryPtr_;                //!< Pointer to the current FVElementGeometry
+    const SubControlVolumeFace* scvFacePtr_;                //!< Pointer to the sub control volume face for which the flux variables are created
+    const ElementVolumeVariables* elemVolVarsPtr_;          //!< Pointer to the current element volume variables
+    const ElementFluxVariablesCache* elemFluxVarsCachePtr_; //!< Pointer to the current element flux variables cache
+    const ElementBoundaryTypes* elemBcTypesPtr_; //!< Pointer to element boundary types
 
 
-    /*!
-     * \brief Returns the frontal part of the momentum flux.
-     *        This treats the flux over the staggered face at the center of an element,
-     *        parallel to the current scvf where the velocity dof of interest lives.
-     *
-     * \verbatim
-     *                    scvf
-     *              ---------=======                 == and # staggered half-control-volume
-     *              |       #      | current scvf
-     *              |       #      |                 # staggered face over which fluxes are calculated
-     *   vel.Opp <~~|       #~~>   x~~~~> vel.Self
-     *              |       #      |                 x dof position
-     *        scvf  |       #      |
-     *              --------========                 -- element
-     *                   scvf
-     * \endverbatim
-     */
-//     FacePrimaryVariables computeFrontalMomentumFlux(const Problem& problem,
-//                                                     const Element& element,
-//                                                     const FaceFVElementGeometry& faceFVGeometry,
-//                                                     const StaggeredScvf& scvf,
-//                                                     const ElementFaceVariables& elemFaceVars,
-//                                                     const GridFluxVariablesCache& gridFluxVarsCache)
-//     {
-//         FacePrimaryVariables frontalFlux(0.0);
 
-//         // The velocities of the dof at interest and the one of the opposite scvf.
-//         const auto& scv = faceFVGeometry.scv(scvf.insideScvIdx());
-//         const auto& faceVars = elemFaceVars[scv];
-//         const auto& context = problem.couplingManager().faceCouplingContext(element, scv);
 
-//         // Advective flux.
-//         if (problem.enableInertiaTerms())
-//         {
-//             // const Scalar velocitySelf = faceVars.velocitySelf();
-//             // const Scalar velocityOpposite = faceVars.velocityOpposite();
-//             // // Get the average velocity at the center of the element (i.e. the location of the staggered face).
-//             // const Scalar transportingVelocity = (velocitySelf + velocityOpposite) * 0.5;
-//             // const bool selfIsUpstream = scvf.directionSign() != sign(transportingVelocity);
-//             //
-//             // StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, context.elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
-//             // frontalFlux += upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream)
-//             //                * transportingVelocity * -1.0 * staggeredScvf.directionSign();
-//         }
 
-//         // The volume variables within the current element. We only require those (and none of neighboring elements)
-//         // because the fluxes are calculated over the staggered face at the center of the element.
-//         const auto eIdx = faceFVGeometry.gridGeometry().elementMapper().index(element);
-//         const auto& cellCenterVolVars = context.elemVolVars[eIdx];
-
-//         // Diffusive flux.
-//         const Scalar velocityGrad_ii = VelocityGradients::velocityGradII(faceFVGeometry, scvf, faceVars) * scvf.directionSign();
-
-//         static const bool enableUnsymmetrizedVelocityGradient
-//             = getParamFromGroup<bool>(problem.paramGroup(), "FreeFlow.EnableUnsymmetrizedVelocityGradient", false);
-//         const Scalar factor = enableUnsymmetrizedVelocityGradient ? 1.0 : 2.0;
-//         frontalFlux -= factor * cellCenterVolVars.effectiveViscosity() * velocityGrad_ii;
-
-//         // The pressure term.
-//         // If specified, the pressure can be normalized using the initial value on the scfv of interest.
-//         // The scvf is used to normalize by the same value from the left and right side.
-//         // Can potentially help to improve the condition number of the system matrix.
-//         const Scalar pressure = normalizePressure ?
-//                                 cellCenterVolVars.pressure() - problem.initial(scv)[Indices::pressureIdx] // TODO problem signatures
-//                               : cellCenterVolVars.pressure();
-
-//         // Account for the orientation of the staggered face's normal outer normal vector
-//         // (pointing in opposite direction of the scvf's one).
-//         frontalFlux += pressure * -1.0 * scvf.directionSign();
-
-//         // Account for the staggered face's area. For rectangular elements, this equals the area of the scvf
-//         // our velocity dof of interest lives on.
-//         return frontalFlux * scvf.area() * cellCenterVolVars.extrusionFactor();
-//    }
 
 //     /*!
 //      * \brief Returns the momentum flux over the staggered faces

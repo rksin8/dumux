@@ -106,10 +106,10 @@ public:
                             const FVElementGeometry& fvGeometry,
                             const ElementVolumeVariables& elemVolVars,
                             const SubControlVolumeFace& scvf,
-                            const ElementFluxVariablesCache& elemFluxVarsCache) const
+                            const ElementFluxVariablesCache& elemFluxVarsCache,
+                            const ElementBoundaryTypes& elemBcTypes) const
     {
-        FluxVariables fluxVars;
-        fluxVars.init(problem, element, fvGeometry, elemVolVars, scvf, elemFluxVarsCache);
+        FluxVariables fluxVars(problem, element, fvGeometry, scvf, elemVolVars, elemFluxVarsCache, elemBcTypes);
 
         NumEqVector flux(0.0);
         flux += fluxVars.advectiveMomentumFlux();
@@ -226,7 +226,7 @@ public:
         }
 
         // Default: Neither the scvf itself nor a lateral one considers a Neumann flux. We just calculate the flux as normal.
-        return this->asImp().computeFlux(problem, element, fvGeometry, elemVolVars, scvf, elemFluxVarsCache);
+        return this->asImp().computeFlux(problem, element, fvGeometry, elemVolVars, scvf, elemFluxVarsCache, elemBcTypes);
     }
 
     //! Returns the implementation of the problem (i.e. static polymorphism)
