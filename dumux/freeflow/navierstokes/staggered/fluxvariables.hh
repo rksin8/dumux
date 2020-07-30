@@ -28,6 +28,8 @@
 #include <optional>
 #include <type_traits>
 
+#include <dumux/assembly/simpleassemblystructs.hh>
+
 #include <dumux/common/math.hh>
 #include <dumux/common/exceptions.hh>
 #include <dumux/common/parameters.hh>
@@ -71,6 +73,8 @@ class NavierStokesFluxVariablesImpl<TypeTag, DiscretizationMethod::staggered>
     using ElementFaceVariables = typename GridFaceVariables::LocalView;
     using FaceVariables = typename GridFaceVariables::FaceVariables;
 
+    using SimpleMassBalanceSummands = GetPropType<TypeTag, Properties::SimpleMassBalanceSummands>;
+    using SimpleMomentumBalanceSummands = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummands>;
     using Problem = GetPropType<TypeTag, Properties::Problem>;
     using GridGeometry = GetPropType<TypeTag, Properties::GridGeometry>;
     using FVElementGeometry = typename GridGeometry::LocalView;
@@ -149,13 +153,14 @@ public:
      *                   scvf
      * \endverbatim
      */
-    CellCenterPrimaryVariables computeMassFlux(const Problem& problem,
+    void computeMassFlux(const Problem& problem,
                                                const Element& element,
                                                const FVElementGeometry& fvGeometry,
                                                const ElementVolumeVariables& elemVolVars,
                                                const ElementFaceVariables& elemFaceVars,
                                                const SubControlVolumeFace& scvf,
-                                               const FluxVariablesCache& fluxVarsCache)
+                                               const FluxVariablesCache& fluxVarsCache,
+                         SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
         // The advectively transported quantity (i.e density for a single-phase system).
         auto upwindTerm = [](const auto& volVars) { return volVars.density(); };
@@ -170,13 +175,14 @@ public:
     /*!
      * \brief Returns the momentum flux over all staggered faces.
      */
-    FacePrimaryVariables computeMomentumFlux(const Problem& problem,
+    void computeMomentumFlux(const Problem& problem,
                                              const Element& element,
                                              const SubControlVolumeFace& scvf,
                                              const FVElementGeometry& fvGeometry,
                                              const ElementVolumeVariables& elemVolVars,
                                              const ElementFaceVariables& elemFaceVars,
-                                             const GridFluxVariablesCache& gridFluxVarsCache)
+                                             const GridFluxVariablesCache& gridFluxVarsCache,
+                                             SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         return computeFrontalMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache) +
                computeLateralMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache);
@@ -199,13 +205,14 @@ public:
      *                   scvf
      * \endverbatim
      */
-    FacePrimaryVariables computeFrontalMomentumFlux(const Problem& problem,
+    void computeFrontalMomentumFlux(const Problem& problem,
                                                     const Element& element,
                                                     const SubControlVolumeFace& scvf,
                                                     const FVElementGeometry& fvGeometry,
                                                     const ElementVolumeVariables& elemVolVars,
                                                     const ElementFaceVariables& elemFaceVars,
-                                                    const GridFluxVariablesCache& gridFluxVarsCache)
+                                                    const GridFluxVariablesCache& gridFluxVarsCache,
+                                                    SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         FacePrimaryVariables frontalFlux(0.0);
 
@@ -222,7 +229,7 @@ public:
             const bool selfIsUpstream = scvf.directionSign() != sign(transportingVelocity);
 
             StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
-            frontalFlux += upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream)
+            frontalFlux += upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream, simpleMomentumBalanceSummands)
                            * transportingVelocity * -1.0 * scvf.directionSign();
         }
 
@@ -274,13 +281,14 @@ public:
      *                 scvf
      * \endverbatim
      */
-    FacePrimaryVariables computeLateralMomentumFlux(const Problem& problem,
+    void computeLateralMomentumFlux(const Problem& problem,
                                                     const Element& element,
                                                     const SubControlVolumeFace& scvf,
                                                     const FVElementGeometry& fvGeometry,
                                                     const ElementVolumeVariables& elemVolVars,
                                                     const ElementFaceVariables& elemFaceVars,
-                                                    const GridFluxVariablesCache& gridFluxVarsCache)
+                                                    const GridFluxVariablesCache& gridFluxVarsCache,
+                                    SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         FacePrimaryVariables lateralFlux(0.0);
         const auto& faceVars = elemFaceVars[scvf];
@@ -404,12 +412,12 @@ public:
                                                                           scvf, elemVolVars, elemFaceVars,
                                                                           gridFluxVarsCache,
                                                                           currentScvfBoundaryTypes, lateralFaceBoundaryTypes,
-                                                                          localSubFaceIdx);
+                                                                          localSubFaceIdx, simpleMomentumBalanceSummands);
 
             lateralFlux += computeDiffusivePartOfLateralMomentumFlux_(problem, fvGeometry, element,
                                                                       scvf, elemVolVars, faceVars,
                                                                       currentScvfBoundaryTypes, lateralFaceBoundaryTypes,
-                                                                      localSubFaceIdx);
+                                                                      localSubFaceIdx, simpleMomentumBalanceSummands);
         }
         return lateralFlux;
     }
@@ -430,11 +438,12 @@ public:
      *                                              // boundary
      * \endverbatim
      */
-    FacePrimaryVariables inflowOutflowBoundaryFlux(const Problem& problem,
+    void inflowOutflowBoundaryFlux(const Problem& problem,
                                                    const Element& element,
                                                    const SubControlVolumeFace& scvf,
                                                    const ElementVolumeVariables& elemVolVars,
-                                                   const ElementFaceVariables& elemFaceVars) const
+                                                   const ElementFaceVariables& elemFaceVars,
+                                SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FacePrimaryVariables inOrOutflow(0.0);
         const auto& insideVolVars = elemVolVars[scvf.insideScvIdx()];
@@ -484,7 +493,7 @@ private:
      *                 scvf
      * \endverbatim
      */
-    FacePrimaryVariables computeAdvectivePartOfLateralMomentumFlux_(const Problem& problem,
+    void computeAdvectivePartOfLateralMomentumFlux_(const Problem& problem,
                                                                     const FVElementGeometry& fvGeometry,
                                                                     const Element& element,
                                                                     const SubControlVolumeFace& scvf,
@@ -493,7 +502,8 @@ private:
                                                                     const GridFluxVariablesCache& gridFluxVarsCache,
                                                                     const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
                                                                     const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
-                                                                    const int localSubFaceIdx)
+                                                                    const int localSubFaceIdx,
+                                                    SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         const auto eIdx = scvf.insideScvIdx();
         const auto& lateralFace = fvGeometry.scvf(eIdx, scvf.pairData(localSubFaceIdx).localLateralFaceIdx);
@@ -531,7 +541,7 @@ private:
         const bool selfIsUpstream = lateralFace.directionSign() == sign(transportingVelocity);
         StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
         FaceLateralSubControlVolumeFace lateralScvf(lateralStaggeredSCVFCenter_(lateralFace, scvf, localSubFaceIdx), 0.5*lateralFace.area());
-        return upwindHelper.computeUpwindLateralMomentum(selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes)
+        return upwindHelper.computeUpwindLateralMomentum(selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, simpleMomentumBalanceSummands)
                * transportingVelocity * lateralFace.directionSign() * Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace);
     }
 
@@ -557,7 +567,7 @@ private:
      *                                              -- elements
      * \endverbatim
      */
-    FacePrimaryVariables computeDiffusivePartOfLateralMomentumFlux_(const Problem& problem,
+    void computeDiffusivePartOfLateralMomentumFlux_(const Problem& problem,
                                                                     const FVElementGeometry& fvGeometry,
                                                                     const Element& element,
                                                                     const SubControlVolumeFace& scvf,
@@ -565,7 +575,8 @@ private:
                                                                     const FaceVariables& faceVars,
                                                                     const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
                                                                     const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
-                                                                    const int localSubFaceIdx)
+                                                                    const int localSubFaceIdx,
+                                                    SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         const auto eIdx = scvf.insideScvIdx();
         const auto& lateralFace = fvGeometry.scvf(eIdx, scvf.pairData(localSubFaceIdx).localLateralFaceIdx);

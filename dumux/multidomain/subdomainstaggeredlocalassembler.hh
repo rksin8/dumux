@@ -31,6 +31,7 @@
 #include <dune/common/hybridutilities.hh>
 #include <dune/grid/common/gridenums.hh> // for GhostEntity
 
+#include <dumux/assembly/simpleassemblystructs.hh>
 #include <dumux/common/reservedblockvector.hh>
 #include <dumux/common/properties.hh>
 #include <dumux/common/parameters.hh>
@@ -80,6 +81,10 @@ class SubDomainStaggeredLocalAssemblerBase : public FVLocalAssemblerBase<TypeTag
     using CouplingManager = typename Assembler::CouplingManager;
 
     static constexpr auto numEq = GetPropType<TypeTag, Properties::ModelTraits>::numEq();
+
+    using SimpleMassBalanceSummands = GetPropType<TypeTag, Properties::SimpleMassBalanceSummands>;
+    using SimpleMomentumBalanceSummands = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummands>;
+    using SimpleMomentumBalanceSummandsVector = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummandsVector>;
 
 public:
     static constexpr auto domainId = typename Dune::index_constant<id>();
@@ -147,7 +152,7 @@ public:
      * \brief Convenience function to evaluate the complete local residual for the current element. Automatically chooses the the appropriate
      *        element volume variables.
      */
-    CellCenterResidualValue evalLocalResidualForCellCenter() const
+    void evalLocalResidualForCellCenter(SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         if (!isImplicit)
             if (this->assembler().isStationaryProblem())
@@ -158,8 +163,8 @@ public:
             return CellCenterResidualValue(0.0);
         }
 
-        return isImplicit ? evalLocalResidualForCellCenter(this->curElemVolVars(), this->curElemFaceVars())
-                          : evalLocalResidualForCellCenter(this->prevElemVolVars(), this->prevElemFaceVars());
+        return isImplicit ? evalLocalResidualForCellCenter(this->curElemVolVars(), this->curElemFaceVars(), simpleMassBalanceSummands)
+                          : evalLocalResidualForCellCenter(this->prevElemVolVars(), this->prevElemFaceVars(), simpleMassBalanceSummands);
     }
 
     /*!
@@ -167,13 +172,14 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    CellCenterResidualValue evalLocalResidualForCellCenter(const ElementVolumeVariables& elemVolVars,
-                                                           const ElementFaceVariables& elemFaceVars) const
+    void evalLocalResidualForCellCenter(const ElementVolumeVariables& elemVolVars,
+                                                           const ElementFaceVariables& elemFaceVars,
+                                        SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        auto residual = evalLocalFluxAndSourceResidualForCellCenter(elemVolVars, elemFaceVars);
+        auto residual = evalLocalFluxAndSourceResidualForCellCenter(elemVolVars, elemFaceVars, simpleMassBalanceSummands);
 
         if (!this->assembler().isStationaryProblem())
-            residual += evalLocalStorageResidualForCellCenter();
+            residual += evalLocalStorageResidualForCellCenter(simpleMassBalanceSummands);
 
         // handle cells with a fixed Dirichlet value
         const auto cellCenterGlobalI = problem().gridGeometry().elementMapper().index(this->element());
@@ -193,10 +199,10 @@ public:
      *        of the local residual for the current element. Automatically chooses the the appropriate
      *        element volume and face variables.
      */
-    CellCenterResidualValue evalLocalFluxAndSourceResidualForCellCenter() const
+    void evalLocalFluxAndSourceResidualForCellCenter(SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        return isImplicit ? evalLocalFluxAndSourceResidualForCellCenter(this->curElemVolVars(), this->curElemFaceVars())
-                          : evalLocalFluxAndSourceResidualForCellCenter(this->prevElemVolVars(), this->prevElemFaceVars());
+        return isImplicit ? evalLocalFluxAndSourceResidualForCellCenter(this->curElemVolVars(), this->curElemFaceVars(), simpleMassBalanceSummands)
+                          : evalLocalFluxAndSourceResidualForCellCenter(this->prevElemVolVars(), this->prevElemFaceVars(), simpleMassBalanceSummands);
      }
 
     /*!
@@ -206,9 +212,11 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    CellCenterResidualValue evalLocalFluxAndSourceResidualForCellCenter(const ElementVolumeVariables& elemVolVars, const ElementFaceVariables& elemFaceVars) const
+    void evalLocalFluxAndSourceResidualForCellCenter(const ElementVolumeVariables& elemVolVars,
+                                                     const ElementFaceVariables& elemFaceVars,
+                                                     SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        return this->localResidual().evalFluxAndSourceForCellCenter(this->element(), this->fvGeometry(), elemVolVars, elemFaceVars, this->elemBcTypes(), this->elemFluxVarsCache());
+        return this->localResidual().evalFluxAndSourceForCellCenter(this->element(), this->fvGeometry(), elemVolVars, elemFaceVars, this->elemBcTypes(), this->elemFluxVarsCache(), simpleMassBalanceSummands);
     }
 
     /*!
@@ -216,9 +224,9 @@ public:
      *        of the local residual for the current element. Automatically chooses the the appropriate
      *        element volume and face variables.
      */
-    CellCenterResidualValue evalLocalStorageResidualForCellCenter() const
+    void evalLocalStorageResidualForCellCenter(SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        return this->localResidual().evalStorageForCellCenter(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars());
+        return this->localResidual().evalStorageForCellCenter(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars(), simpleMassBalanceSummands);
     }
 
     /*!
@@ -226,7 +234,7 @@ public:
      *        element volume and face variables.
      * \param scvf The sub control volume face
      */
-    FaceResidualValue evalLocalResidualForFace(const SubControlVolumeFace& scvf) const
+    void evalLocalResidualForFace(const SubControlVolumeFace& scvf, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         if (!isImplicit)
             if (this->assembler().isStationaryProblem())
@@ -237,8 +245,8 @@ public:
             return FaceResidualValue(0.0);
         }
 
-        return isImplicit ? evalLocalResidualForFace(scvf, this->curElemVolVars(), this->curElemFaceVars())
-                          : evalLocalResidualForFace(scvf, this->prevElemVolVars(), this->prevElemFaceVars());
+        return isImplicit ? evalLocalResidualForFace(scvf, this->curElemVolVars(), this->curElemFaceVars(), simpleMomentumBalanceSummands)
+                          : evalLocalResidualForFace(scvf, this->prevElemVolVars(), this->prevElemFaceVars(), simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -247,16 +255,17 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    FaceResidualValue evalLocalResidualForFace(const SubControlVolumeFace& scvf,
+    void evalLocalResidualForFace(const SubControlVolumeFace& scvf,
                                                const ElementVolumeVariables& elemVolVars,
-                                               const ElementFaceVariables& elemFaceVars) const
+                                               const ElementFaceVariables& elemFaceVars,
+                                  SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        auto residual = evalLocalFluxAndSourceResidualForFace(scvf, elemVolVars, elemFaceVars);
+        auto residual = evalLocalFluxAndSourceResidualForFace(scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
 
         if (!this->assembler().isStationaryProblem())
-            residual += evalLocalStorageResidualForFace(scvf);
+            residual += evalLocalStorageResidualForFace(scvf, simpleMomentumBalanceSummands);
 
-        this->localResidual().evalDirichletBoundariesForFace(residual, this->problem(), this->element(),
+        this->localResidual().evalDirichletBoundariesForFace(simpleMomentumBalanceSummands, this->problem(), this->element(),
                                                              this->fvGeometry(), scvf, elemVolVars, elemFaceVars,
                                                              this->elemBcTypes(), this->elemFluxVarsCache());
 
@@ -269,10 +278,11 @@ public:
      *        element volume and face variables.
      * \param scvf The sub control volume face
      */
-    FaceResidualValue evalLocalFluxAndSourceResidualForFace(const SubControlVolumeFace& scvf) const
+    void evalLocalFluxAndSourceResidualForFace(const SubControlVolumeFace& scvf,
+                                               SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        return isImplicit ? evalLocalFluxAndSourceResidualForFace(scvf, this->curElemVolVars(), this->curElemFaceVars())
-                          : evalLocalFluxAndSourceResidualForFace(scvf, this->prevElemVolVars(), this->prevElemFaceVars());
+        return isImplicit ? evalLocalFluxAndSourceResidualForFace(scvf, this->curElemVolVars(), this->curElemFaceVars(), simpleMomentumBalanceSummands)
+                          : evalLocalFluxAndSourceResidualForFace(scvf, this->prevElemVolVars(), this->prevElemFaceVars(), simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -282,11 +292,12 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    FaceResidualValue evalLocalFluxAndSourceResidualForFace(const SubControlVolumeFace& scvf,
+    void evalLocalFluxAndSourceResidualForFace(const SubControlVolumeFace& scvf,
                                                             const ElementVolumeVariables& elemVolVars,
-                                                            const ElementFaceVariables& elemFaceVars) const
+                                                            const ElementFaceVariables& elemFaceVars,
+                                               SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        return this->localResidual().evalFluxAndSourceForFace(this->element(), this->fvGeometry(), elemVolVars, elemFaceVars, this->elemBcTypes(), this->elemFluxVarsCache(), scvf);
+        return this->localResidual().evalFluxAndSourceForFace(this->element(), this->fvGeometry(), elemVolVars, elemFaceVars, this->elemBcTypes(), this->elemFluxVarsCache(), scvf, simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -295,9 +306,10 @@ public:
      *        element volume and face variables.
      * \param scvf The sub control volume face
      */
-    FaceResidualValue evalLocalStorageResidualForFace(const SubControlVolumeFace& scvf) const
+    void evalLocalStorageResidualForFace(const SubControlVolumeFace& scvf,
+                                         SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        return this->localResidual().evalStorageForFace(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars(), this->prevElemFaceVars(), this->curElemFaceVars(), scvf);
+        return this->localResidual().evalStorageForFace(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars(), this->prevElemFaceVars(), this->curElemFaceVars(), scvf, simpleMomentumBalanceSummands);
     }
 
     const Problem& problem() const
@@ -328,9 +340,11 @@ private:
     template<class JacobianMatrixRow, class SubSol, class GridVariablesTuple>
     auto assembleJacobianAndResidualImpl_(Dune::index_constant<cellCenterId>, JacobianMatrixRow& jacRow, SubSol& res, GridVariablesTuple& gridVariables)
     {
+        SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
+
         auto& gridVariablesI = *std::get<domainId>(gridVariables);
         const auto cellCenterGlobalI = problem().gridGeometry().elementMapper().index(this->element());
-        const auto residual = this->asImp_().assembleCellCenterJacobianAndResidualImpl(jacRow[domainId], gridVariablesI);
+        const auto residual = this->asImp_().assembleCellCenterJacobianAndResidualImpl(jacRow[domainId], gridVariablesI, simpleMassBalanceSummands);
         res[cellCenterGlobalI] = residual;
 
 
@@ -339,7 +353,7 @@ private:
         static constexpr auto otherDomainIds = makeIncompleteIntegerSequence<JacobianMatrixRow::size(), domainId>{};
         forEach(otherDomainIds, [&](auto&& domainJ)
         {
-            this->asImp_().assembleJacobianCellCenterCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI);
+            this->asImp_().assembleJacobianCellCenterCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI, simpleMassBalanceSummands);
         });
 
         // handle cells with a fixed Dirichlet value
@@ -350,8 +364,10 @@ private:
     template<class JacobianMatrixRow, class SubSol, class GridVariablesTuple>
     void assembleJacobianAndResidualImpl_(Dune::index_constant<faceId>, JacobianMatrixRow& jacRow, SubSol& res, GridVariablesTuple& gridVariables)
     {
+        SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
+
         auto& gridVariablesI = *std::get<domainId>(gridVariables);
-        const auto residual = this->asImp_().assembleFaceJacobianAndResidualImpl(jacRow[domainId], gridVariablesI);
+        const auto residual = this->asImp_().assembleFaceJacobianAndResidualImpl(jacRow[domainId], gridVariablesI, simpleMomentumBalanceSummands);
 
         for(auto&& scvf : scvfs(this->fvGeometry()))
             res[scvf.dofIndex()] += residual[scvf.localFaceIdx()];
@@ -361,7 +377,7 @@ private:
         static constexpr auto otherDomainIds = makeIncompleteIntegerSequence<JacobianMatrixRow::size(), domainId>{};
         forEach(otherDomainIds, [&](auto&& domainJ)
         {
-            this->asImp_().assembleJacobianFaceCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI);
+            this->asImp_().assembleJacobianFaceCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI, simpleMomentumBalanceSummands);
         });
     }
 
@@ -511,14 +527,18 @@ class SubDomainStaggeredLocalAssembler<id, TypeTag, Assembler, DiffMethod::numer
 public:
     using ParentType::ParentType;
 
-    CellCenterResidualValue assembleCellCenterResidualImpl()
+    void assembleCellCenterResidualImpl()
     {
-        return this->evalLocalResidualForCellCenter();
+        SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
+
+        return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
     }
 
-    FaceResidualValue assembleFaceResidualImpl(const SubControlVolumeFace& scvf)
+    void assembleFaceResidualImpl(const SubControlVolumeFace& scvf)
     {
-        return this->evalLocalResidualForFace(scvf);
+        SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
+
+        return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -528,7 +548,7 @@ public:
      * \return The element residual at the current solution.
      */
     template<class JacobianMatrixDiagBlock, class GridVariables>
-    CellCenterResidualValue assembleCellCenterJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables)
+    void assembleCellCenterJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
         assert(domainI == cellCenterId);
 
@@ -540,7 +560,7 @@ public:
         const auto& curSol = this->curSol()[domainI];
 
         const auto cellCenterGlobalI = gridGeometry.elementMapper().index(element);
-        const auto origResidual = this->evalLocalResidualForCellCenter();
+        const auto origResidual = this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
 
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Calculate derivatives of all cell center residuals in the element w.r.t. to other cell center dofs. //
@@ -575,7 +595,7 @@ public:
                     this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, cellCenterPriVars, pvIdx);
 
                     // compute element residual
-                    return this->evalLocalResidualForCellCenter();
+                    return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
                 };
 
                 // create the vector storing the partial derivatives
@@ -619,7 +639,7 @@ public:
      * \return The element residual at the current solution.
      */
     template<class JacobianMatrixDiagBlock, class GridVariables>
-    auto assembleFaceJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables)
+    auto assembleFaceJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         assert(domainI == faceId);
 
@@ -637,7 +657,7 @@ public:
 
         // treat the local residua of the face dofs:
         for (auto&& scvf : scvfs(fvGeometry))
-            origResiduals[scvf.localFaceIdx()] = this->evalLocalResidualForFace(scvf);
+            origResiduals[scvf.localFaceIdx()] = this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
 
         ///////////////////////////////////////////////////////////////////////////////////////////////////
         // Calculate derivatives of all face residuals in the element w.r.t. to other face dofs.         //
@@ -675,7 +695,7 @@ public:
                         this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, faceSolution[globalJ], pvIdx);
 
                         // compute face residual
-                        return this->evalLocalResidualForFace(scvf);
+                        return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
                     };
 
                     // derive the residuals numerically
@@ -719,7 +739,7 @@ public:
      */
     template<class JacobianBlock, class GridVariables>
     void assembleJacobianCellCenterCoupling(Dune::index_constant<faceId> domainJ, JacobianBlock& A,
-                                            const CellCenterResidualValue& origResidual, GridVariables& gridVariables)
+                                            const CellCenterResidualValue& origResidual, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
         /////////////////////////////////////////////////////////////////////////////////////////////////////////
         //  Calculate derivatives of all cell center residuals in the element w.r.t. to all coupled faces dofs //
@@ -755,7 +775,7 @@ public:
                     this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, facePriVars, pvIdx);
 
                     // compute element residual
-                    return this->evalLocalResidualForCellCenter();
+                    return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
                 };
 
                 // create the vector storing the partial derivatives
@@ -782,7 +802,7 @@ public:
 
     template<std::size_t otherId, class JacobianBlock, class GridVariables>
     void assembleJacobianCellCenterCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
-                                            const CellCenterResidualValue& res, GridVariables& gridVariables)
+                                            const CellCenterResidualValue& res, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
         /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         //  Calculate derivatives of all cell center residuals in the element w.r.t. all dofs in the coupling stencil. //
@@ -841,7 +861,7 @@ public:
      */
     template<class JacobianBlock, class ElementResidualVector, class GridVariables>
     void assembleJacobianFaceCoupling(Dune::index_constant<cellCenterId> domainJ, JacobianBlock& A,
-                                      const ElementResidualVector& origResiduals, GridVariables& gridVariables)
+                                      const ElementResidualVector& origResiduals, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         /////////////////////////////////////////////////////////////////////////////////////////////////////
         //  Calculate derivatives of all face residuals in the element w.r.t. all coupled cell center dofs //
@@ -890,7 +910,7 @@ public:
                         this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, deflectedCellCenterPriVars, pvIdx);
 
                         // compute face residual
-                        return this->evalLocalResidualForFace(scvf);
+                        return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
                     };
 
                     // derive the residuals numerically
@@ -916,7 +936,7 @@ public:
 
     template<std::size_t otherId, class JacobianBlock, class ElementResidualVector, class GridVariables>
     void assembleJacobianFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
-                                      const ElementResidualVector& res, GridVariables& gridVariables)
+                                      const ElementResidualVector& res, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         //////////////////////////////////////////////////////////////////////////////////////////////////////////
         //  Calculate derivatives of all face residuals in the element w.r.t. all dofs in the coupling stencil. //

@@ -26,6 +26,7 @@
 
 #include <dune/common/hybridutilities.hh>
 
+#include <dumux/assembly/simpleassemblystructs.hh>
 #include <dumux/common/properties.hh>
 #include <dumux/discretization/method.hh>
 #include <dumux/discretization/extrusion.hh>
@@ -61,6 +62,8 @@ class NavierStokesResidualImpl<TypeTag, DiscretizationMethod::staggered>
     using GridFaceVariables = typename GridVariables::GridFaceVariables;
     using ElementFaceVariables = typename GridFaceVariables::LocalView;
 
+    using SimpleMassBalanceSummands = GetPropType<TypeTag, Properties::SimpleMassBalanceSummands>;
+    using SimpleMomentumBalanceSummands = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummands>;
     using Scalar = GetPropType<TypeTag, Properties::Scalar>;
     using Implementation = GetPropType<TypeTag, Properties::LocalResidual>;
     using Problem = GetPropType<TypeTag, Properties::Problem>;
@@ -93,17 +96,18 @@ public:
     using ParentType::ParentType;
 
     //! Evaluate fluxes entering or leaving the cell center control volume.
-    CellCenterPrimaryVariables computeFluxForCellCenter(const Problem& problem,
+    void computeFluxForCellCenter(const Problem& problem,
                                                         const Element &element,
                                                         const FVElementGeometry& fvGeometry,
                                                         const ElementVolumeVariables& elemVolVars,
                                                         const ElementFaceVariables& elemFaceVars,
                                                         const SubControlVolumeFace &scvf,
-                                                        const ElementFluxVariablesCache& elemFluxVarsCache) const
+                                                        const ElementFluxVariablesCache& elemFluxVarsCache,
+                                  SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         FluxVariables fluxVars;
         CellCenterPrimaryVariables flux = fluxVars.computeMassFlux(problem, element, fvGeometry, elemVolVars,
-                                                                   elemFaceVars, scvf, elemFluxVarsCache[scvf]);
+                                                                   elemFaceVars, scvf, elemFluxVarsCache[scvf], simpleMassBalanceSummands);
 
         EnergyLocalResidual::heatFlux(flux, problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf);
 
@@ -111,12 +115,13 @@ public:
     }
 
     //! Evaluate the source term for the cell center control volume.
-    CellCenterPrimaryVariables computeSourceForCellCenter(const Problem& problem,
+    void computeSourceForCellCenter(const Problem& problem,
                                                           const Element &element,
                                                           const FVElementGeometry& fvGeometry,
                                                           const ElementVolumeVariables& elemVolVars,
                                                           const ElementFaceVariables& elemFaceVars,
-                                                          const SubControlVolume &scv) const
+                                                          const SubControlVolume &scv,
+                                    SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         CellCenterPrimaryVariables result(0.0);
 
@@ -132,9 +137,10 @@ public:
 
 
     //! Evaluate the storage term for the cell center control volume.
-    CellCenterPrimaryVariables computeStorageForCellCenter(const Problem& problem,
+    void computeStorageForCellCenter(const Problem& problem,
                                                            const SubControlVolume& scv,
-                                                           const VolumeVariables& volVars) const
+                                                           const VolumeVariables& volVars,
+                                     SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         CellCenterPrimaryVariables storage;
         storage[Indices::conti0EqIdx - ModelTraits::dim()] = volVars.density();
@@ -145,10 +151,11 @@ public:
     }
 
     //! Evaluate the storage term for the face control volume.
-    FacePrimaryVariables computeStorageForFace(const Problem& problem,
+    void computeStorageForFace(const Problem& problem,
                                                const SubControlVolumeFace& scvf,
                                                const VolumeVariables& volVars,
-                                               const ElementFaceVariables& elemFaceVars) const
+                                               const ElementFaceVariables& elemFaceVars,
+                                              SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FacePrimaryVariables storage(0.0);
         const Scalar velocity = elemFaceVars[scvf].velocitySelf();
@@ -157,12 +164,13 @@ public:
     }
 
     //! Evaluate the source term for the face control volume.
-    FacePrimaryVariables computeSourceForFace(const Problem& problem,
+    void computeSourceForFace(const Problem& problem,
                                               const Element& element,
                                               const FVElementGeometry& fvGeometry,
                                               const SubControlVolumeFace& scvf,
                                               const ElementVolumeVariables& elemVolVars,
-                                              const ElementFaceVariables& elemFaceVars) const
+                                              const ElementFaceVariables& elemFaceVars,
+                                              SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FacePrimaryVariables source(0.0);
         const auto& insideVolVars = elemVolVars[scvf.insideScvIdx()];
@@ -173,29 +181,31 @@ public:
     }
 
     //! Evaluate the momentum flux for the face control volume.
-    FacePrimaryVariables computeFluxForFace(const Problem& problem,
+    void computeFluxForFace(const Problem& problem,
                                             const Element& element,
                                             const SubControlVolumeFace& scvf,
                                             const FVElementGeometry& fvGeometry,
                                             const ElementVolumeVariables& elemVolVars,
                                             const ElementFaceVariables& elemFaceVars,
-                                            const ElementFluxVariablesCache& elemFluxVarsCache) const
+                                            const ElementFluxVariablesCache& elemFluxVarsCache,
+                                            SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FluxVariables fluxVars;
-        return fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache());
+        return fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
     }
 
     /*!
      * \brief Evaluate boundary conditions for a cell center dof
      */
-    CellCenterResidual computeBoundaryFluxForCellCenter(const Problem& problem,
+    void computeBoundaryFluxForCellCenter(const Problem& problem,
                                                         const Element& element,
                                                         const FVElementGeometry& fvGeometry,
                                                         const SubControlVolumeFace& scvf,
                                                         const ElementVolumeVariables& elemVolVars,
                                                         const ElementFaceVariables& elemFaceVars,
                                                         const ElementBoundaryTypes& elemBcTypes,
-                                                        const ElementFluxVariablesCache& elemFluxVarsCache) const
+                                                        const ElementFluxVariablesCache& elemFluxVarsCache,
+                                          SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         CellCenterResidual result(0.0);
 
@@ -208,7 +218,7 @@ public:
                 return result;
 
             // treat Dirichlet and outflow BCs
-            result = computeFluxForCellCenter(problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf, elemFluxVarsCache);
+            result = computeFluxForCellCenter(problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf, elemFluxVarsCache, simpleMassBalanceSummands);
 
             // treat Neumann BCs, i.e. overwrite certain fluxes by user-specified values
             static constexpr auto numEqCellCenter = CellCenterResidual::dimension;
@@ -233,7 +243,7 @@ public:
     /*!
      * \brief Evaluate Dirichlet (fixed value) boundary conditions for a face dof
      */
-    void evalDirichletBoundariesForFace(FaceResidual& residual,
+    void evalDirichletBoundariesForFace(SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
                                         const Problem& problem,
                                         const Element& element,
                                         const FVElementGeometry& fvGeometry,
@@ -269,14 +279,15 @@ public:
     /*!
      * \brief Evaluate boundary boundary fluxes for a face dof
      */
-    FaceResidual computeBoundaryFluxForFace(const Problem& problem,
+    void computeBoundaryFluxForFace(const Problem& problem,
                                             const Element& element,
                                             const FVElementGeometry& fvGeometry,
                                             const SubControlVolumeFace& scvf,
                                             const ElementVolumeVariables& elemVolVars,
                                             const ElementFaceVariables& elemFaceVars,
                                             const ElementBoundaryTypes& elemBcTypes,
-                                            const ElementFluxVariablesCache& elemFluxVarsCache) const
+                                            const ElementFluxVariablesCache& elemFluxVarsCache,
+                                    SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FaceResidual result(0.0);
 
@@ -295,16 +306,16 @@ public:
                                          * extrusionFactor * Extrusion::area(scvf);
 
                 // ... and treat the fluxes of the remaining (frontal and lateral) faces of the staggered control volume
-                result += fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache());
+                result += fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
             }
             else if(bcTypes.isDirichlet(Indices::pressureIdx))
             {
                 // we are at an "fixed pressure" boundary for which the resdiual of the momentum balance needs to be assembled
                 // as if it where inside the domain and not on the boundary (source term has already been acounted for)
-                result = fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache());
+                result = fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
 
                 // incorporate the inflow or outflow contribution
-                result += fluxVars.inflowOutflowBoundaryFlux(problem, element, scvf, elemVolVars, elemFaceVars);
+                result += fluxVars.inflowOutflowBoundaryFlux(problem, element, scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
             }
         }
         return result;

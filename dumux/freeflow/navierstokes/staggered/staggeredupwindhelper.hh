@@ -27,6 +27,8 @@
 #include <array>
 #include <optional>
 
+#include <dumux/assembly/simpleassemblystructs.hh>
+
 #include <dumux/common/math.hh>
 #include <dumux/common/exceptions.hh>
 #include <dumux/common/parameters.hh>
@@ -60,6 +62,8 @@ class StaggeredUpwindHelper
     using ElementFaceVariables = typename GridFaceVariables::LocalView;
     using FaceVariables = typename GridFaceVariables::FaceVariables;
 
+    using SimpleMassBalanceSummands = GetPropType<TypeTag, Properties::SimpleMassBalanceSummands>;
+    using SimpleMomentumBalanceSummands = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummands>;
     using Problem = GetPropType<TypeTag, Properties::Problem>;
     using GridGeometry = GetPropType<TypeTag, Properties::GridGeometry>;
     using FVElementGeometry = typename GridGeometry::LocalView;
@@ -112,7 +116,8 @@ public:
      *        Then the corresponding set of momenta are collected and the prescribed
      *        upwinding method is used to calculate the momentum.
      */
-    FacePrimaryVariables computeUpwindFrontalMomentum(const bool selfIsUpstream) const
+    void computeUpwindFrontalMomentum(const bool selfIsUpstream,
+                                      SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         const auto density = elemVolVars_[scvf_.insideScvIdx()].density();
 
@@ -142,11 +147,12 @@ public:
      *        Then the corresponding set of momenta are collected and the prescribed
      *        upwinding method is used to calculate the momentum.
      */
-    FacePrimaryVariables computeUpwindLateralMomentum(const bool selfIsUpstream,
+    void computeUpwindLateralMomentum(const bool selfIsUpstream,
                                                       const SubControlVolumeFace& lateralFace,
                                                       const int localSubFaceIdx,
                                                       const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
-                                                      const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes) const
+                                                      const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
+                                      SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         // Check whether the own or the neighboring element is upstream.
         // Get the transporting velocity, located at the scvf perpendicular to the current scvf where the dof
