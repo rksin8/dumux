@@ -251,29 +251,46 @@ public:
         return PrimaryVariables(0.0);
     }
 
-//    /*!
-//      * \brief Returns the analytical solution for the pressure.
-//      */
-//     auto& getAnalyticalPressureSolution() const
-//     {
-//         return analyticalPressure_;
-//     }
+    /*!
+     * \brief Returns the analytical solution for the pressure
+     */
+    template<bool enable = !ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
+    const std::vector<Scalar> getAnalyticalPressureSolution() const
+    {
+        std::vector<Scalar> analyticalPressure(this->gridGeometry().gridView().size(0));
+        for (const auto& element : elements(this->gridGeometry().gridView()))
+        {
+            auto fvGeometry = localView(this->gridGeometry());
+            fvGeometry.bindElement(element);
+            for (auto&& scv : scvs(fvGeometry))
+            {
+                const auto ccDofIdx = scv.dofIndex();
+                const auto ccDofPosition = scv.dofPosition();
+                const auto analyticalSolutionAtCc = analyticalSolution(ccDofPosition);
+                analyticalPressure[ccDofIdx] = analyticalSolutionAtCc[/*Indices::pressureIdx*/2];
+            }
+        }
 
-//    /*!
-//      * \brief Returns the analytical solution for the velocity
-//      */
-//     auto& getAnalyticalVelocitySolution() const
-//     {
-//         return analyticalVelocity_;
-//     }
+        return analyticalPressure;
+    }
 
-//    /*!
-//      * \brief Returns the analytical solution for the velocity at the faces.
-//      */
-//     auto& getAnalyticalVelocitySolutionOnFace() const
-//     {
-//         return analyticalVelocityOnFace_;
-//     }
+    /*!
+     * \brief Returns the analytical solution for the velocity
+     */
+    template<bool enable = ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
+    const std::vector<VelocityVector> getAnalyticalVelocitySolution() const
+    {
+        std::vector<VelocityVector> analyticalVelocity(this->gridGeometry().gridView().size(0));
+        for (const auto& element : elements(this->gridGeometry().gridView()))
+        {
+            const auto& pos = element.geometry().center();
+            const auto eIdx = this->gridGeometry().elementMapper().index(element);
+            for(int dirIdx = 0; dirIdx < ModelTraits::dim(); ++dirIdx)
+                analyticalVelocity[eIdx][dirIdx] = analyticalSolution(pos)[Indices::velocity(dirIdx)];
+        }
+
+        return analyticalVelocity;
+    }
 
         //! Enable internal Dirichlet constraints
     static constexpr bool enableInternalDirichletConstraints()

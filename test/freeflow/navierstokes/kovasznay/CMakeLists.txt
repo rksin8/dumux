@@ -6,8 +6,8 @@ dumux_add_test(NAME test_ff_navierstokes_kovasznay_new
               COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
               CMD_ARGS       --script fuzzy
                              --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_navierstokes_kovasznay-reference.vtu
-                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay-00001.vtu
-                             --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay params.input
+                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay-00000.vtu
+                             --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_navierstokes_kovasznay_new params.input
                              -Problem.Name test_ff_navierstokes_kovasznay")
 
 dumux_add_test(NAME test_ff_navierstokes_kovasznay

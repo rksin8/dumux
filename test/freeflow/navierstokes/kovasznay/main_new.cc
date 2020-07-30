@@ -143,7 +143,7 @@ int main(int argc, char** argv) try
     massGridVariables->init(x[massIdx]);
     momentumGridVariables->init(x[momentumIdx]);
 
-
+    // the assembler with time loop for instationary problem
     using Assembler = MultiDomainFVAssembler<Traits, CouplingManager, DiffMethod::numeric>;
     auto assembler = std::make_shared<Assembler>(std::make_tuple(momentumProblem, massProblem),
                                                  std::make_tuple(momentumGridGeometry, massGridGeometry),
@@ -156,8 +156,13 @@ int main(int argc, char** argv) try
     VtkOutputModule vtkWriter(*massGridVariables, x[massIdx], massProblem->name());
     IOFields::initOutputModule(vtkWriter); // Add model specific output fields
     vtkWriter.addVelocityOutput(std::make_shared<NavierStokesVelocityOutput<MassGridVariables>>());
+    const auto exactPressure = massProblem->getAnalyticalPressureSolution();
+    const auto exactVelocity = momentumProblem->getAnalyticalVelocitySolution();
+    vtkWriter.addField(exactPressure, "pressureExact");
+    vtkWriter.addField(exactVelocity, "velocityExact");
 
     // the linear solver
+    // using LinearSolver = IstlSolverFactoryBackend<LinearSolverTraits<GridGeometry>>
     using LinearSolver = Dumux::UMFPackBackend;
     auto linearSolver = std::make_shared<LinearSolver>();
 
@@ -170,26 +175,8 @@ int main(int argc, char** argv) try
     nonLinearSolver.solve(x);
     timer.stop();
 
-
+    // write vtk output
     vtkWriter.write(1.0);
-    // // the assembler with time loop for instationary problem
-    // using Assembler = StaggeredFVAssembler<TypeTag, DiffMethod::numeric>;
-    // auto assembler = std::make_shared<Assembler>(problem, gridGeometry, gridVariables);
-
-    // // the linear solver
-    // using LinearSolver = Dumux::UzawaBiCGSTABBackend<LinearSolverTraits<GridGeometry>>;
-    // auto linearSolver = std::make_shared<LinearSolver>();
-
-    // // the non-linear solver
-    // using NewtonSolver = Dumux::NewtonSolver<Assembler, LinearSolver>;
-    // NewtonSolver nonLinearSolver(assembler, linearSolver);
-
-    // // linearize & solve
-    // Dune::Timer timer;
-    // nonLinearSolver.solve(x);
-
-    // // write vtk output
-    // vtkWriter.write(1.0);
     // problem->printL2Error(x);
 
     // timer.stop();
@@ -198,7 +185,6 @@ int main(int argc, char** argv) try
     std::cout << "Simulation took " << timer.elapsed() << " seconds on "
               << comm.size() << " processes.\n"
               << "The cumulative CPU time was " << timer.elapsed()*comm.size() << " seconds.\n";
-
 
     ////////////////////////////////////////////////////////////
     // finalize, print dumux message to say goodbye
