@@ -340,7 +340,7 @@ public:
      *
      * \verbatim
      *              ----------------
-     *              |              |
+     *              |     inner    |
      *              |    transp.   |
      *              |      vel.    |~~~~> outer vel.
      *              |       ^      |
@@ -387,26 +387,36 @@ public:
                     return innerTransportingVelocity; // fallback value, should actually never be called
             }
 
-            // average the transporting volume by weighting with the scv volumes
+            // average the transporting velocity by weighting with the scv volumes
             const auto insideVolume = fvGeometry.scv(orthogonalScvf.insideScvIdx()).volume();
             const auto outsideVolume = fvGeometry.scv(orthogonalScvf.outsideScvIdx()).volume();
             const auto outerTransportingVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
             return (insideVolume*innerTransportingVelocity + outsideVolume*outerTransportingVelocity) / (insideVolume + outsideVolume);
         }();
 
-        const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
+        const Scalar transportedMomentum = [&]()
+        {
+            // use the Dirichlet velocity as for transported momentum if the lateral face is on a Dirichlet boundary
+            if (scvf.boundary())
+            {
+                if (const auto& scv = fvGeometry.scv(scvf.insideScvIdx()); this->elemBcTypes()[scvf.localIndex()].isDirichlet(scv.directionIndex()))
+                    return problem.dirichlet(this->element(), scvf)[scv.directionIndex()] * this->problem().density(this->element(), scv);
+            }
 
-        const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
-        const auto outerVelocity = elemVolVars[scvf.outsideScvIdx()].velocity();
+            const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
 
-        const auto insideMomentum = innerVelocity * this->problem().density(this->element(),  fvGeometry.scv(scvf.insideScvIdx()));
-        const auto outsideMomentum = outerVelocity * this->problem().density(this->element(), fvGeometry.scv(scvf.insideScvIdx())); // TODO this is still the wrong density
+            const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
+            const auto outerVelocity = elemVolVars[scvf.outsideScvIdx()].velocity();
 
-        // TODO use higher order helper
-        static const auto upwindWeight = getParamFromGroup<Scalar>(problem.paramGroup(), "Flux.UpwindWeight");
+            const auto insideMomentum = innerVelocity * this->problem().density(this->element(), fvGeometry.scv(scvf.insideScvIdx()));
+            const auto outsideMomentum = outerVelocity * this->problem().density(this->element(), fvGeometry.scv(scvf.insideScvIdx())); // TODO this is still the wrong density
 
-        const Scalar transportedMomentum = selfIsUpstream ? (upwindWeight * insideMomentum + (1.0 - upwindWeight) * outsideMomentum)
-                                                          : (upwindWeight * outsideMomentum + (1.0 - upwindWeight) * insideMomentum);
+            // TODO use higher order helper
+            static const auto upwindWeight = getParamFromGroup<Scalar>(problem.paramGroup(), "Flux.UpwindWeight");
+
+            return selfIsUpstream ? (upwindWeight * insideMomentum + (1.0 - upwindWeight) * outsideMomentum)
+                                  : (upwindWeight * outsideMomentum + (1.0 - upwindWeight) * insideMomentum);
+        }();
 
         return  transportingVelocity * transportedMomentum * scvf.directionSign() * scvf.area();
     }
