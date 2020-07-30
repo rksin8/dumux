@@ -369,8 +369,10 @@ public:
         // get the transporting velocity which is perpendicular to our own (inner) velocity
         const Scalar transportingVelocity = [&]()
         {
+            static const bool useOldScheme = getParam<bool>("FreeFlow.UseOldTransportingVelocity", true); // TODO how to deprecate?
+
             // use the Dirichlet velocity as transporting velocity if the lateral face is on a Dirichlet boundary
-            if (scvf.boundary())
+            if (!useOldScheme && scvf.boundary())
             {
                 if (this->elemBcTypes()[scvf.localIndex()].isDirichlet(scvf.directionIndex()))
                     return problem.dirichlet(this->element(), scvf)[scvf.directionIndex()];
@@ -378,6 +380,9 @@ public:
 
             const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
             const Scalar innerTransportingVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
+
+            if (useOldScheme)
+                return innerTransportingVelocity;
 
             if (orthogonalScvf.boundary())
             {
