@@ -90,7 +90,7 @@ public:
             return this->asImp().computeFluxWithNeumannBoundaries(problem, element, fvGeometry, elemVolVars, elemBcTypes, elemFluxVarsCache, scvf);
 
 
-        return this->asImp().computeFlux(problem, element, fvGeometry, elemVolVars, scvf, elemFluxVarsCache);
+        return this->asImp().computeFlux(problem, element, fvGeometry, elemVolVars, scvf, elemFluxVarsCache, elemBcTypes);
     }
 
     using ParentType::evalStorage;
