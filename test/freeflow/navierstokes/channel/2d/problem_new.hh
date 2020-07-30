@@ -33,11 +33,9 @@
 #include <dumux/material/components/constant.hh>
 #include <dumux/material/components/simpleh2o.hh>
 
-#include <dumux/common/boundarytypes.hh>
 #include <dumux/freeflow/navierstokes/momentum/model.hh>
-#include <dumux/freeflow/navierstokes/momentum/problem.hh>
-#include <dumux/freeflow/navierstokes/massandenergy/model.hh>
-#include <dumux/freeflow/navierstokes/massandenergy/problem.hh>
+#include <dumux/freeflow/navierstokes/mass/1p/model.hh>
+#include <dumux/freeflow/navierstokes/problem.hh>
 #include <dumux/discretization/fcstaggered.hh>
 #include <dumux/discretization/cctpfa.hh>
 
@@ -58,7 +56,7 @@ namespace Properties {
 namespace TTag {
 struct ChannelTest {};
 struct ChannelTestMomentum { using InheritsFrom = std::tuple<ChannelTest, NavierStokesMomentum, FaceCenteredStaggeredModel>; };
-struct ChannelTestMass { using InheritsFrom = std::tuple<ChannelTest, NavierStokesMassAndEnergy, CCTpfaModel>; };
+struct ChannelTestMass { using InheritsFrom = std::tuple<ChannelTest, NavierStokesMassOneP, CCTpfaModel>; };
 } // end namespace TTag
 
 // Set the problem property
@@ -94,32 +92,6 @@ template<class TypeTag>
 struct EnableGridVolumeVariablesCache<TypeTag, TTag::ChannelTest> { static constexpr bool value = true; };
 } // end namespace Properties
 
-namespace Impl {
-
-template<class TypeTag>
-constexpr bool isMomentumProblem()
-{
-    return GetPropType<TypeTag, Properties::GridGeometry>::discMethod == DiscretizationMethod::fcstaggered;
-};
-
-template<class TypeTag>
-using BaseProblem = std::conditional_t<isMomentumProblem<TypeTag>(),
-                                       NavierStokesMomentumProblem<TypeTag>,
-                                       NavierStokesMassAndEnergyProblem<TypeTag>>;
-
-template<class TypeTag>
-using BoundaryTypes = std::conditional_t<isMomentumProblem<TypeTag>(),
-                                         Dumux::BoundaryTypes<GetPropType<TypeTag, Properties::ModelTraits>::dim()>,
-                                         Dumux::BoundaryTypes<GetPropType<TypeTag, Properties::ModelTraits>::numEq()>>;
-template<class TypeTag>
-using NumEqVector = std::conditional_t<isMomentumProblem<TypeTag>(),
-                                       Dune::FieldVector<GetPropType<TypeTag, Properties::Scalar>, GetPropType<TypeTag, Properties::ModelTraits>::dim()>,
-                                       GetPropType<TypeTag, Properties::NumEqVector>>;
-
-template<class TypeTag>
-using PrimaryVariables = NumEqVector<TypeTag>;
-
-}
 
 /*!
  * \ingroup NavierStokesTests
@@ -133,25 +105,28 @@ using PrimaryVariables = NumEqVector<TypeTag>;
  * while the walls are fully isolating.
  */
 template <class TypeTag>
-class ChannelTestProblem : public Impl::BaseProblem<TypeTag>
+class ChannelTestProblem : public NavierStokesProblem<TypeTag>
 {
-    using ParentType = Impl::BaseProblem<TypeTag>;
-    using BoundaryTypes = Impl::BoundaryTypes<TypeTag>;
+    using ParentType = NavierStokesProblem<TypeTag>;
+    using BoundaryTypes = typename ParentType::BoundaryTypes;
     using GridGeometry = GetPropType<TypeTag, Properties::GridGeometry>;
     using FVElementGeometry = typename GridGeometry::LocalView;
     using SubControlVolume = typename FVElementGeometry::SubControlVolume;
     using SubControlVolumeFace = typename FVElementGeometry::SubControlVolumeFace;
     using Indices = typename GetPropType<TypeTag, Properties::ModelTraits>::Indices;
-    using NumEqVector = Impl::NumEqVector<TypeTag>;
+    using NumEqVector = typename ParentType::NumEqVector;
     using ModelTraits = GetPropType<TypeTag, Properties::ModelTraits>;
-    using PrimaryVariables = Impl::PrimaryVariables<TypeTag>;
+    using PrimaryVariables = typename ParentType::PrimaryVariables;
     using Scalar = GetPropType<TypeTag, Properties::Scalar>;
     using SolutionVector = GetPropType<TypeTag, Properties::SolutionVector>;
+
+    static constexpr auto dimWorld = GridGeometry::GridView::dimensionworld;
     using Element = typename GridGeometry::GridView::template Codim<0>::Entity;
     using GlobalPosition = typename Element::Geometry::GlobalCoordinate;
+    using VelocityVector = Dune::FieldVector<Scalar, dimWorld>;
 
-    using TimeLoopPtr = std::shared_ptr<CheckPointTimeLoop<Scalar>>;
     using CouplingManager = GetPropType<TypeTag, Properties::CouplingManager>;
+    using TimeLoopPtr = std::shared_ptr<CheckPointTimeLoop<Scalar>>;
 
     // the types of outlet boundary conditions
     enum class OutletCondition
@@ -244,7 +219,7 @@ public:
         // }
         // else
         // {
-            if constexpr (Impl::isMomentumProblem<TypeTag>())
+            if constexpr (ParentType::isMomentumProblem())
             {
                 values.setDirichlet(Indices::velocityXIdx);
                 values.setDirichlet(Indices::velocityYIdx);
@@ -285,7 +260,7 @@ public:
 // #endif
 //         }
 
-        if constexpr (Impl::isMomentumProblem<TypeTag>())
+        if constexpr (ParentType::isMomentumProblem())
         {
             values[Indices::velocityXIdx] = parabolicProfile(globalPos[1], inletVelocity_);
         }
@@ -312,15 +287,42 @@ public:
     {
         NumEqVector values(0.0);
 
-        if constexpr (Impl::isMomentumProblem<TypeTag>())
+        if constexpr (ParentType::isMomentumProblem())
         {
-            values[Indices::momentumXBalanceIdx] = outletPressure_; // TODO use helper?
-            if constexpr (getPropValue<TypeTag, Properties::NormalizePressure>())
-                values[Indices::momentumXBalanceIdx] -= outletPressure_;
+            // pressure contribution
+            if (scvf.isFrontal())
+            {
+                values[scvf.directionIndex()] = outletPressure_;
+                if constexpr (getPropValue<TypeTag, Properties::NormalizePressure>())
+                    values[scvf.directionIndex()] -= outletPressure_;
+            }
 
+            // inertial terms
             if (this->enableInertiaTerms() && isOutlet_(scvf.ipGlobal()))
+            {
+                if (scvf.isFrontal())
                     values[Indices::momentumXBalanceIdx] += elemVolVars[scvf.insideScvIdx()].velocity() * elemVolVars[scvf.insideScvIdx()].velocity() * this->density(element, fvGeometry, scvf) * scvf.directionSign();
 
+                else // scvf.isLateral()
+                {
+                    const auto transportingVelocity = [&]()
+                    {
+                        if (scvf.boundary())
+                        {
+                            if (const auto bcTypes = this->boundaryTypes(element, scvf); bcTypes.isDirichlet(scvf.directionIndex()))
+                                return this->dirichlet(element, scvf)[scvf.directionIndex()];
+                        }
+
+                        // fallback
+                        const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                        return elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
+                    }();
+
+                    values[Indices::momentumYBalanceIdx] += elemVolVars[scvf.insideScvIdx()].velocity() * transportingVelocity * this->density(element, fvGeometry, scvf) * scvf.directionSign();
+                }
+            }
+
+            // viscous terms
             if (outletCondition_ == OutletCondition::doNothing)
                 values[Indices::momentumYBalanceIdx] = 0;
             else if (outletCondition_ == OutletCondition::outflow) // TODO put in outflow helper
@@ -328,13 +330,13 @@ public:
                 if (scvf.isLateral() && !fvGeometry.scv(scvf.insideScvIdx()).boundary())
                 {
                     const auto mu = this->effectiveViscosity(element, fvGeometry, scvf);
-                    values[Indices::momentumYBalanceIdx] = -mu * StaggeredVelocityGradients::velocityGradJI(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
+                    values[Indices::momentumYBalanceIdx] -= mu * StaggeredVelocityGradients::velocityGradJI(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
                 }
 
                 if (scvf.isLateral() && fvGeometry.scv(scvf.insideScvIdx()).boundary())
                 {
                     const auto mu = this->effectiveViscosity(element, fvGeometry, scvf);
-                    values[Indices::momentumYBalanceIdx] = -mu * StaggeredVelocityGradients::velocityGradIJ(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
+                    values[Indices::momentumYBalanceIdx] -= mu * StaggeredVelocityGradients::velocityGradIJ(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
                 }
             }
             else
@@ -399,7 +401,7 @@ public:
     {
         PrimaryVariables values;
 
-        if constexpr (Impl::isMomentumProblem<TypeTag>())
+        if constexpr (ParentType::isMomentumProblem())
         {
             values[Indices::velocityYIdx] = 0.0;
             if (useVelocityProfile_)
