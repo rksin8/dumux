@@ -69,10 +69,12 @@ public:
     const SubControlVolumeFace& scvf(GridIndexType scvfIdx) const
     { return gridGeometry().scvf(scvfIdx); }
 
-     const SubControlVolumeFace& scvfWithCommonEntity(const SubControlVolumeFace& scvf) const
-     {
+    //! Return a the lateral sub control volume face which is orthogonal to the given sub control volume face
+    const SubControlVolumeFace& lateralOrthogonalScvf(const SubControlVolumeFace& scvf) const
+    {
          assert(scvf.isLateral());
          return gridGeometry().scvf(scvf.scvfIdxWithCommonEntity());
+    }
 
      //! Return the frontal sub control volume face on a the boundary for a given sub control volume
      const SubControlVolumeFace& frontalScvfOnBoundary(const SubControlVolume& scv) const
