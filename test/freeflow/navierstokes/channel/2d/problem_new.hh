@@ -29,9 +29,9 @@
 
 
 
-#include <dumux/material/fluidsystems/1pliquid.hh>
+#include <dumux/material/fluidsystems/1pgas.hh>
 #include <dumux/material/components/constant.hh>
-#include <dumux/material/components/simpleh2o.hh>
+#include <dumux/material/components/air.hh>
 
 #include <dumux/freeflow/navierstokes/momentum/model.hh>
 #include <dumux/freeflow/navierstokes/mass/1p/model.hh>
@@ -74,7 +74,7 @@ struct FluidSystem<TypeTag, TTag::ChannelTest>
 #if NONISOTHERMAL
     using type = FluidSystems::OnePLiquid<Scalar, Components::SimpleH2O<Scalar> >;
 #else
-    using type = FluidSystems::OnePLiquid<Scalar, Components::Constant<1, Scalar> >;
+    using type = FluidSystems::OnePGas<Scalar, Components::Air<Scalar> >;
 #endif
 };
 
@@ -350,7 +350,7 @@ public:
         {
             if (isInlet_(scvf.ipGlobal()) || isOutlet_(scvf.ipGlobal()))
             {
-                const auto insideDensity = elemVolVars[scvf.insideScvIdx()].density();
+                const auto insideDensity = isInlet_(scvf.ipGlobal()) ? 1.35313 : elemVolVars[scvf.insideScvIdx()].density();
                 values[Indices::conti0EqIdx] = this->faceVelocity(element, fvGeometry, scvf) * insideDensity * scvf.unitOuterNormal();
             }
         }

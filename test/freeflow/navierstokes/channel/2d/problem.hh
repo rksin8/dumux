@@ -33,9 +33,9 @@
 #include <dumux/freeflow/navierstokes/model.hh>
 #include <dumux/freeflow/navierstokes/problem.hh>
 
-#include <dumux/material/fluidsystems/1pliquid.hh>
+#include <dumux/material/fluidsystems/1pgas.hh>
 #include <dumux/material/components/constant.hh>
-#include <dumux/material/components/simpleh2o.hh>
+#include <dumux/material/components/air.hh>
 
 namespace Dumux {
 template <class TypeTag>
@@ -59,7 +59,7 @@ struct FluidSystem<TypeTag, TTag::ChannelTest>
 #if NONISOTHERMAL
     using type = FluidSystems::OnePLiquid<Scalar, Components::SimpleH2O<Scalar> >;
 #else
-    using type = FluidSystems::OnePLiquid<Scalar, Components::Constant<1, Scalar> >;
+    using type = FluidSystems::OnePGas<Scalar, Components::Air< Scalar> >;
 #endif
 };
 
@@ -170,6 +170,7 @@ public:
         {
             values.setDirichlet(Indices::velocityXIdx);
             values.setDirichlet(Indices::velocityYIdx);
+            values.setNeumann(2);
 #if NONISOTHERMAL
             values.setDirichlet(Indices::temperatureIdx);
 #endif
@@ -197,6 +198,7 @@ public:
         {
             values.setDirichlet(Indices::velocityXIdx);
             values.setDirichlet(Indices::velocityYIdx);
+            values.setNeumann(2);
 #if NONISOTHERMAL
             values.setNeumann(Indices::energyEqIdx);
 #endif
@@ -214,8 +216,10 @@ public:
     {
         PrimaryVariables values = initialAtPos(globalPos);
 
+
         if(isInlet_(globalPos))
         {
+            values[Indices::velocityXIdx] = parabolicProfile(globalPos[1], inletVelocity_);
 #if NONISOTHERMAL
             // give the system some time so that the pressure can equilibrate, then start the injection of the hot liquid
             if(time() >= 200.0)
@@ -254,6 +258,9 @@ public:
 
         if (outletCondition_ != OutletCondition::doNothing)
             values[1] = -dudy(scvf.center()[1], inletVelocity_) * elemVolVars[scvf.insideScvIdx()].viscosity();
+
+        if (isInlet_(scvf.center()))
+            values[2] = 1.35313 * elemFaceVars[scvf].velocitySelf() * scvf.directionSign();
 
         return values;
     }
