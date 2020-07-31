@@ -183,9 +183,7 @@ public:
                 //  ----> x
                 //                                       O integration point at which Neumann flux is evaluated (here for y component)
                 //
-                auto scvfIter = scvfs(fvGeometry, scv).begin();
-                ++scvfIter;
-                const auto frontalScvfOnBoundary  = *scvfIter; //TODO convenience function
+                const auto& frontalScvfOnBoundary = fvGeometry.frontalScvfOnBoundary(scv);
                 assert(frontalScvfOnBoundary.isFrontal() && frontalScvfOnBoundary.boundary());
                 const auto& bcTypes = elemBcTypes[frontalScvfOnBoundary.localIndex()];
                 if (bcTypes.hasNeumann() && bcTypes.isNeumann(scvf.directionIndex()))
