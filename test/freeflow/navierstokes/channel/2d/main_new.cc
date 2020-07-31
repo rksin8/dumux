@@ -44,7 +44,7 @@
 #include <dumux/multidomain/newtonsolver.hh>
 
 #include <dumux/io/vtkoutputmodule.hh>
-#include <dumux/freeflow/navierstokes/massandenergy/velocityoutput.hh>
+#include <dumux/freeflow/navierstokes/velocityoutput.hh>
 
 #include "problem_new.hh"
 
@@ -154,7 +154,7 @@ int main(int argc, char** argv) try
     using IOFields = GetPropType<MassTypeTag, Properties::IOFields>;
     VtkOutputModule vtkWriter(*massGridVariables, x[massIdx], massProblem->name());
     IOFields::initOutputModule(vtkWriter); // Add model specific output fields
-    vtkWriter.addVelocityOutput(std::make_shared<NewStaggeredFreeFlowVelocityOutput<MassGridVariables>>());
+    vtkWriter.addVelocityOutput(std::make_shared<NavierStokesVelocityOutput<MassGridVariables>>());
     vtkWriter.write(0);
 
     using Assembler = MultiDomainFVAssembler<Traits, CouplingManager, DiffMethod::numeric>;

@@ -314,7 +314,7 @@ public:
                         }
 
                         // fallback
-                        const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                        const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                         return elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
                     }();
 
