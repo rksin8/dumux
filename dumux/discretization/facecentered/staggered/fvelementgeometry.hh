@@ -73,6 +73,18 @@ public:
      {
          assert(scvf.isLateral());
          return gridGeometry().scvf(scvf.scvfIdxWithCommonEntity());
+
+     //! Return the frontal sub control volume face on a the boundary for a given sub control volume
+     const SubControlVolumeFace& frontalScvfOnBoundary(const SubControlVolume& scv) const
+     {
+         assert(scv.boundary());
+
+         // frontal boundary faces are always stored directly after the interior boundary face (which comes first in the container)
+         auto scvfIter = scvfs(*this, scv).begin();
+         ++scvfIter;
+         assert(scvfIter->isFrontal());
+         assert(scvfIter->boundary());
+         return *scvfIter;
      }
 
     //! iterator range for sub control volumes. Iterates over
