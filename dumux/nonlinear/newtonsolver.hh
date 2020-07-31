@@ -1156,6 +1156,8 @@ private:
     {
         assert(this->checkSizesOfSubMatrices(A) && "Sub-blocks of MultiTypeBlockMatrix have wrong sizes!");
 
+        static const bool printmatrix = getParam<bool>("Problem.PrintMatrix", false);
+
         // create the bcrs matrix the IterativeSolver backend can handle
         const auto M = MatrixConverter<JacobianMatrix>::multiTypeToBCRSMatrix(A);
 
@@ -1163,9 +1165,15 @@ private:
         const std::size_t numRows = M.N();
         assert(numRows == M.M());
 
+        if (printmatrix)
+            Dune::printmatrix(std::cout, M, "", "");
+
         // create the vector the IterativeSolver backend can handle
         const auto bTmp = VectorConverter<SolutionVector>::multiTypeToBlockVector(b);
         assert(bTmp.size() == numRows);
+
+        if (printmatrix)
+            Dune::printvector(std::cout, bTmp, "", "");
 
         // create a blockvector to which the linear solver writes the solution
         using VectorBlock = typename Dune::FieldVector<Scalar, 1>;
