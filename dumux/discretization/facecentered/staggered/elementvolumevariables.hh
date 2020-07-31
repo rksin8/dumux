@@ -124,7 +124,7 @@ public:
             }
 
             // treat domain corners
-            if (const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf); orthogonalScvf.boundary())
+            if (const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf); orthogonalScvf.boundary())
             {
                 if (const auto orthogonalBcTypes = problem.boundaryTypes(element, orthogonalScvf); orthogonalBcTypes.hasOnlyDirichlet())
                     addBoundaryVolVars(scvf);
