@@ -378,7 +378,7 @@ public:
                     return problem.dirichlet(this->element(), scvf)[scvf.directionIndex()];
             }
 
-            const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+            const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
             const Scalar innerTransportingVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
 
             if (useOldScheme)
