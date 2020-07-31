@@ -102,6 +102,10 @@ class NavierStokesFluxVariablesImpl<TypeTag, DiscretizationMethod::staggered>
     static constexpr int upwindSchemeOrder = getPropValue<TypeTag, Properties::UpwindSchemeOrder>();
     static constexpr bool useHigherOrder = upwindSchemeOrder > 1;
 
+    enum {
+        pressureIdx = Indices::pressureIdx
+    };
+
 public:
 
     using HeatConductionType = GetPropType<TypeTag, Properties::HeatConductionType>;
@@ -116,6 +120,7 @@ public:
      */
     template<class UpwindTerm>
     static Scalar advectiveFluxForCellCenter(const Problem& problem,
+                                             const Element& element,
                                              const ElementVolumeVariables& elemVolVars,
                                              const ElementFaceVariables& elemFaceVars,
                                              const SubControlVolumeFace &scvf,
@@ -131,9 +136,16 @@ public:
         const auto& upstreamVolVars = insideIsUpstream ? insideVolVars : outsideVolVars;
         const auto& downstreamVolVars = insideIsUpstream ? outsideVolVars : insideVolVars;
 
-        const Scalar flux = (upwindWeight * upwindTerm(upstreamVolVars) +
+        Scalar flux = (upwindWeight * upwindTerm(upstreamVolVars) +
                             (1.0 - upwindWeight) * upwindTerm(downstreamVolVars))
-                            * velocity * Extrusion::area(scvf) * scvf.directionSign();
+                            * Extrusion::area(scvf) * scvf.directionSign();
+
+        if (scvf.boundary()){
+            const auto bcTypes = problem.boundaryTypes(element, scvf);
+            if (bcTypes.isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                flux *= velocity;
+            }
+        }
 
         return flux * extrusionFactor_(elemVolVars, scvf);
     }
@@ -159,15 +171,14 @@ public:
                                                const ElementVolumeVariables& elemVolVars,
                                                const ElementFaceVariables& elemFaceVars,
                                                const SubControlVolumeFace& scvf,
-                                               const FluxVariablesCache& fluxVarsCache,
-                         SimpleMassBalanceSummands& simpleMassBalanceSummands)
+                                               const FluxVariablesCache& fluxVarsCache)
     {
         // The advectively transported quantity (i.e density for a single-phase system).
         auto upwindTerm = [](const auto& volVars) { return volVars.density(); };
 
         // Call the generic flux function.
         CellCenterPrimaryVariables result(0.0);
-        result[Indices::conti0EqIdx - ModelTraits::dim()] = advectiveFluxForCellCenter(problem, elemVolVars, elemFaceVars, scvf, upwindTerm);
+        result[Indices::conti0EqIdx - ModelTraits::dim()] = advectiveFluxForCellCenter(problem, element, elemVolVars, elemFaceVars, scvf, upwindTerm);
 
         return result;
     }
@@ -184,8 +195,8 @@ public:
                                              const GridFluxVariablesCache& gridFluxVarsCache,
                                              SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
-        return computeFrontalMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache) +
-               computeLateralMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache);
+        computeFrontalMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache, simpleMomentumBalanceSummands);
+        computeLateralMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, gridFluxVarsCache, simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -214,7 +225,10 @@ public:
                                                     const GridFluxVariablesCache& gridFluxVarsCache,
                                                     SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
-        FacePrimaryVariables frontalFlux(0.0);
+        // Account for the staggered face's area. For rectangular elements, this equals the area of the scvf
+        // our velocity dof of interest lives on but with adjusted centroid
+        const auto& scv = fvGeometry.scv(scvf.insideScvIdx());
+        FaceFrontalSubControlVolumeFace frontalFace(scv.center(), scvf.area());
 
         // The velocities of the dof at interest and the one of the opposite scvf.
         const Scalar velocitySelf = elemFaceVars[scvf].velocitySelf();
@@ -229,8 +243,9 @@ public:
             const bool selfIsUpstream = scvf.directionSign() != sign(transportingVelocity);
 
             StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
-            frontalFlux += upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream, simpleMomentumBalanceSummands)
-                           * transportingVelocity * -1.0 * scvf.directionSign();
+            Scalar factor =  transportingVelocity * -1.0 * scvf.directionSign() * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor();
+
+            upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream, simpleMomentumBalanceSummands, factor);
         }
 
         // The volume variables within the current element. We only require those (and none of neighboring elements)
@@ -243,7 +258,7 @@ public:
         static const bool enableUnsymmetrizedVelocityGradient
             = getParamFromGroup<bool>(problem.paramGroup(), "FreeFlow.EnableUnsymmetrizedVelocityGradient", false);
         const Scalar factor = enableUnsymmetrizedVelocityGradient ? 1.0 : 2.0;
-        frontalFlux -= factor * insideVolVars.effectiveViscosity() * velocityGrad_ii;
+        frontalFlux -= factor * insideVolVars.effectiveViscosity() * velocityGrad_ii * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor();
 
         // The pressure term.
         // If specified, the pressure can be normalized using the initial value on the scfv of interest.
@@ -255,13 +270,7 @@ public:
 
         // Account for the orientation of the staggered face's normal outer normal vector
         // (pointing in opposite direction of the scvf's one).
-        frontalFlux += pressure * -1.0 * scvf.directionSign();
-
-        // Account for the staggered face's area. For rectangular elements, this equals the area of the scvf
-        // our velocity dof of interest lives on but with adjusted centroid
-        const auto& scv = fvGeometry.scv(scvf.insideScvIdx());
-        FaceFrontalSubControlVolumeFace frontalFace(scv.center(), scvf.area());
-        return frontalFlux * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor();
+        frontalFlux += pressure * -1.0 * scvf.directionSign() * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor();
    }
 
     /*!
@@ -541,8 +550,9 @@ private:
         const bool selfIsUpstream = lateralFace.directionSign() == sign(transportingVelocity);
         StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
         FaceLateralSubControlVolumeFace lateralScvf(lateralStaggeredSCVFCenter_(lateralFace, scvf, localSubFaceIdx), 0.5*lateralFace.area());
-        return upwindHelper.computeUpwindLateralMomentum(selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, simpleMomentumBalanceSummands)
-               * transportingVelocity * lateralFace.directionSign() * Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace);
+        Scalar factor = transportingVelocity * lateralFace.directionSign() * Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace)
+
+        return upwindHelper.computeUpwindLateralMomentum(selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, simpleMomentumBalanceSummands, factor);
     }
 
     /*!

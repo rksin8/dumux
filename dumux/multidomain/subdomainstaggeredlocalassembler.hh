@@ -119,16 +119,16 @@ public:
      *        to the global matrix. The element residual is written into the right hand side.
      */
     template<class JacobianMatrixRow, class SubSol, class GridVariablesTuple>
-    void assembleJacobianAndResidual(JacobianMatrixRow& jacRow, SubSol& res, GridVariablesTuple& gridVariables)
+    void assembleCoefficientMatrixAndRHS(JacobianMatrixRow& coefficentMatrixRow, SubSol& RHS, GridVariablesTuple& gridVariables)
     {
         this->asImp_().bindLocalViews();
         this->elemBcTypes().update(problem(), this->element(), this->fvGeometry());
 
-        assembleJacobianAndResidualImpl_(domainId, jacRow, res, gridVariables);
+        assembleCoefficientMatrixAndRHSImpl_(domainId, coefficentMatrixRow, RHS, gridVariables);
     }
 
     /*!
-     * \brief Assemble the residual only
+     * \brief Assemble the residual only (for convergence information)
      */
     template<class SubSol>
     void assembleResidual(SubSol& res)
@@ -177,22 +177,20 @@ public:
                                                            const ElementFaceVariables& elemFaceVars,
                                         SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        auto residual = evalLocalFluxAndSourceResidualForCellCenter(elemVolVars, elemFaceVars, simpleMassBalanceSummands);
+        evalLocalFluxAndSourceResidualForCellCenter(elemVolVars, elemFaceVars, simpleMassBalanceSummands);
 
         if (!this->assembler().isStationaryProblem())
-            residual += evalLocalStorageResidualForCellCenter(simpleMassBalanceSummands);
+            evalLocalStorageResidualForCellCenter(simpleMassBalanceSummands);
 
-        // handle cells with a fixed Dirichlet value
-        const auto cellCenterGlobalI = problem().gridGeometry().elementMapper().index(this->element());
-        const auto& scvI = this->fvGeometry().scv(cellCenterGlobalI);
-        for (int pvIdx = 0; pvIdx < numEqCellCenter; ++pvIdx)
+        CellCenterResidualValue res(0.0);
+
+        for (auto&& scvf : scvfs(this->fvGeometry()))
         {
-            static constexpr auto offset = numEq - numEqCellCenter;
-            if (this->problem().isDirichletCell(this->element(), this->fvGeometry(), scvI, pvIdx + offset))
-                residual[pvIdx] = this->curSol()[cellCenterId][cellCenterGlobalI][pvIdx] - this->problem().dirichlet(this->element(), scvI)[pvIdx + offset];
+            res += simpleMassBalanceSummands.coefficients[scvf.localFaceIdx()] * elemFaceVars[scvf].velocitySelf();
         }
+        res -= simpleMassBalanceSummands.RHS;
 
-        return residual;
+        return res;
     }
 
     /*!
@@ -262,16 +260,32 @@ public:
                                                const ElementFaceVariables& elemFaceVars,
                                   SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        auto residual = evalLocalFluxAndSourceResidualForFace(scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
+        evalLocalFluxAndSourceResidualForFace(scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
 
         if (!this->assembler().isStationaryProblem())
-            residual += evalLocalStorageResidualForFace(scvf, simpleMomentumBalanceSummands);
+            evalLocalStorageResidualForFace(scvf, simpleMomentumBalanceSummands);
 
         this->localResidual().evalDirichletBoundariesForFace(simpleMomentumBalanceSummands, this->problem(), this->element(),
                                                              this->fvGeometry(), scvf, elemVolVars, elemFaceVars,
                                                              this->elemBcTypes(), this->elemFluxVarsCache());
 
-        return residual;
+        FaceResidualValue res(0.0);
+        res +=
+        simpleMomentumBalanceSummands.selfCoefficient * elemFaceVars[scvf].velocitySelf()
+        + simpleMomentumBalanceSummands.oppositeCoefficient * elemFaceVars[scvf].velocityOpposite();
+
+        const int numSubFaces = scvf.pairData().size();
+        for (int localSubFaceIdx = 0; localSubFaceIdx < numSubFaces; ++localSubFaceIdx){
+            res += simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityParallel(localSubFaceIdx);
+            res += simpleMomentumBalanceSummands.innerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityNormalInside(localSubFaceIdx);
+            res += simpleMomentumBalanceSummands.outerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityNormalOutside(localSubFaceIdx);
+        }
+
+        res +=
+        simpleMomentumBalanceSummands.pressureCoefficient * elemVolVars[scvf.insideScvIdx()].pressure()
+        - simpleMomentumBalanceSummands.RHS;
+
+        return res;
     }
 
     /*!
@@ -295,8 +309,8 @@ public:
      * \param elemFaceVars The element face variables
      */
     void evalLocalFluxAndSourceResidualForFace(const SubControlVolumeFace& scvf,
-                                                            const ElementVolumeVariables& elemVolVars,
-                                                            const ElementFaceVariables& elemFaceVars,
+                                               const ElementVolumeVariables& elemVolVars,
+                                               const ElementFaceVariables& elemFaceVars,
                                                SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         return this->localResidual().evalFluxAndSourceForFace(this->element(), this->fvGeometry(), elemVolVars, elemFaceVars, this->elemBcTypes(), this->elemFluxVarsCache(), scvf, simpleMomentumBalanceSummands);
@@ -311,7 +325,7 @@ public:
     void evalLocalStorageResidualForFace(const SubControlVolumeFace& scvf,
                                          SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        return this->localResidual().evalStorageForFace(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars(), this->prevElemFaceVars(), this->curElemFaceVars(), scvf, simpleMomentumBalanceSummands);
+        this->localResidual().evalStorageForFace(this->element(), this->fvGeometry(), this->prevElemVolVars(), this->curElemVolVars(), this->prevElemFaceVars(), this->curElemFaceVars(), scvf, simpleMomentumBalanceSummands);
     }
 
     const Problem& problem() const
@@ -340,14 +354,14 @@ private:
 
     //! Assembles the residuals and derivatives for the cell center dofs.
     template<class JacobianMatrixRow, class SubSol, class GridVariablesTuple>
-    auto assembleJacobianAndResidualImpl_(Dune::index_constant<cellCenterId>, JacobianMatrixRow& jacRow, SubSol& res, GridVariablesTuple& gridVariables)
+    void assembleCoefficientMatrixAndRHSImpl_(Dune::index_constant<cellCenterId>, JacobianMatrixRow& coefficentMatrixRow, SubSol& RHS, GridVariablesTuple& gridVariables)
     {
         SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
 
         auto& gridVariablesI = *std::get<domainId>(gridVariables);
         const auto cellCenterGlobalI = problem().gridGeometry().elementMapper().index(this->element());
-        const auto residual = this->asImp_().assembleCellCenterJacobianAndResidualImpl(jacRow[domainId], gridVariablesI, simpleMassBalanceSummands);
-        res[cellCenterGlobalI] = residual;
+        this->asImp_().assembleCellCenterCoefficientMatrixAndRHSImpl(coefficentMatrixRow[domainId], gridVariablesI, simpleMassBalanceSummands);
+        RHS[cellCenterGlobalI] = simpleMassBalanceSummands.RHS;
 
 
         // for the coupling blocks
@@ -355,31 +369,38 @@ private:
         static constexpr auto otherDomainIds = makeIncompleteIntegerSequence<JacobianMatrixRow::size(), domainId>{};
         forEach(otherDomainIds, [&](auto&& domainJ)
         {
-            this->asImp_().assembleJacobianCellCenterCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI, simpleMassBalanceSummands);
+            this->asImp_().assembleCoefficientMatrixCellCenterCoupling(domainJ, coefficentMatrixRow[domainJ], gridVariablesI, simpleMassBalanceSummands);
         });
 
         // handle cells with a fixed Dirichlet value
-        incorporateDirichletCells_(jacRow);
+        incorporateDirichletCells_(coefficentMatrixRow);
     }
 
     //! Assembles the residuals and derivatives for the face dofs.
     template<class JacobianMatrixRow, class SubSol, class GridVariablesTuple>
-    void assembleJacobianAndResidualImpl_(Dune::index_constant<faceId>, JacobianMatrixRow& jacRow, SubSol& res, GridVariablesTuple& gridVariables)
+    void assembleCoefficientMatrixAndRHSImpl_(Dune::index_constant<faceId>, JacobianMatrixRow& coefficentMatrixRow, SubSol& RHS, GridVariablesTuple& gridVariables)
     {
-        SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
+        SimpleMomentumBalanceSummandsVector simpleMomentumBalanceSummandsVector;
+        for (auto&& scvf : scvfs(this->fvGeometry())){
+            SimpleMomentumBalanceSummands zeroValue(scvf);
+            zeroValue.setToZero(scvf);
+            simpleMomentumBalanceSummandsVector.push_back(zeroValue);
+        }
 
         auto& gridVariablesI = *std::get<domainId>(gridVariables);
-        const auto residual = this->asImp_().assembleFaceJacobianAndResidualImpl(jacRow[domainId], gridVariablesI, simpleMomentumBalanceSummands);
+        this->asImp_().assembleFaceCoefficientMatrixAndRHSImpl(coefficentMatrixRow[domainId], gridVariablesI, simpleMomentumBalanceSummandsVector);
 
         for(auto&& scvf : scvfs(this->fvGeometry()))
-            res[scvf.dofIndex()] += residual[scvf.localFaceIdx()];
+        {
+            RHS[scvf.dofIndex()] += simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].RHS;
+        }
 
         // for the coupling blocks
         using namespace Dune::Hybrid;
         static constexpr auto otherDomainIds = makeIncompleteIntegerSequence<JacobianMatrixRow::size(), domainId>{};
         forEach(otherDomainIds, [&](auto&& domainJ)
         {
-            this->asImp_().assembleJacobianFaceCoupling(domainJ, jacRow[domainJ], residual, gridVariablesI, simpleMomentumBalanceSummands);
+            this->asImp_().assembleCoefficientMatrixFaceCoupling(domainJ, coefficentMatrixRow[domainJ], gridVariablesI, simpleMomentumBalanceSummandsVector);
         });
     }
 
@@ -526,112 +547,37 @@ class SubDomainStaggeredLocalAssembler<id, TypeTag, Assembler, DiffMethod::numer
     static constexpr auto numEqCellCenter = CellCenterPrimaryVariables::dimension;
     static constexpr auto numEqFace = FacePrimaryVariables::dimension;
 
+    using SimpleMassBalanceSummands = typename GET_PROP_TYPE(TypeTag, SimpleMassBalanceSummands);
+    using SimpleMomentumBalanceSummands = typename GET_PROP_TYPE(TypeTag, SimpleMomentumBalanceSummands);
+    using SimpleMomentumBalanceSummandsVector = typename GET_PROP_TYPE(TypeTag, SimpleMomentumBalanceSummandsVector);
+
 public:
     using ParentType::ParentType;
 
-    CellCenterResidualValue assembleCellCenterResidualImpl()
+    CellCenterResidualValue assembleCellCenterResidualImpl(SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
-        SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
-
         return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
     }
 
-    FaceResidualValue assembleFaceResidualImpl(const SubControlVolumeFace& scvf)
+    FaceResidualValue assembleFaceResidualImpl(const SubControlVolumeFace& scvf, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
-        SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
-
         return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
     }
 
     /*!
-     * \brief Computes the derivatives with respect to the given element and adds them
+     * \brief Computes the dcoefficient matrix entries for the given element and adds them
      *        to the global matrix.
      *
-     * \return The element residual at the current solution.
+     * \return The right hand side entries for the element at the current solution.
      */
     template<class JacobianMatrixDiagBlock, class GridVariables>
-    void assembleCellCenterJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
+    void assembleCellCenterCoefficientMatrixAndRHSImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
         assert(domainI == cellCenterId);
 
-        // get some aliases for convenience
-        const auto& element = this->element();
-        const auto& fvGeometry = this->fvGeometry();
-        auto&& curElemVolVars = this->curElemVolVars();
-        const auto& gridGeometry = this->problem().gridGeometry();
-        const auto& curSol = this->curSol()[domainI];
+        this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
 
-        const auto cellCenterGlobalI = gridGeometry.elementMapper().index(element);
-        const auto origResidual = this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
-
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Calculate derivatives of all cell center residuals in the element w.r.t. to other cell center dofs. //
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // lambda to evaluate the derivatives for cell center dofs with respect to neighbor cells
-        auto evaluateCellCenterDerivatives = [&](const std::size_t globalJ)
-        {
-            // get the volVars of the element with respect to which we are going to build the derivative
-            auto&& scvJ = fvGeometry.scv(globalJ);
-            const auto elementJ = fvGeometry.gridGeometry().element(globalJ);
-            auto& curVolVars =  this->getVolVarAccess(gridVariables.curGridVolVars(), curElemVolVars, scvJ);
-            const auto origVolVars(curVolVars);
-
-            for (int pvIdx = 0; pvIdx < numEqCellCenter; ++pvIdx)
-            {
-                CellCenterPrimaryVariables cellCenterPriVars = curSol[globalJ];
-                using PrimaryVariables = typename VolumeVariables::PrimaryVariables;
-                PrimaryVariables priVars = makePriVarsFromCellCenterPriVars<PrimaryVariables>(cellCenterPriVars);
-
-                constexpr auto offset = numEq - numEqCellCenter;
-
-                auto evalResidual = [&](Scalar priVar)
-                {
-                    // update the volume variables
-                    priVars[pvIdx + offset] = priVar;
-                    auto elemSol = elementSolution<FVElementGeometry>(std::move(priVars));
-                    curVolVars.update(elemSol, this->problem(), elementJ, scvJ);
-
-                    // update the coupling context
-                    cellCenterPriVars[pvIdx] = priVar;
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, cellCenterPriVars, pvIdx);
-
-                    // compute element residual
-                    return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
-                };
-
-                // create the vector storing the partial derivatives
-                CellCenterResidualValue partialDeriv(0.0);
-
-                // derive the residuals numerically
-                const auto& paramGroup = this->problem().paramGroup();
-                static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                static const auto eps = this->couplingManager().numericEpsilon(domainI, paramGroup);
-                NumericDifferentiation::partialDerivative(evalResidual, priVars[pvIdx + offset], partialDeriv, origResidual,
-                                                          eps(priVars[pvIdx + offset], pvIdx), numDiffMethod);
-
-                // update the global jacobian matrix with the current partial derivatives
-                updateGlobalJacobian_(A, cellCenterGlobalI, globalJ, pvIdx, partialDeriv);
-
-                // restore the original volVars
-                curVolVars = origVolVars;
-
-                // restore the undeflected state of the coupling context
-                this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, curSol[globalJ], pvIdx);
-            }
-        };
-
-        // get the list of cell center dofs that have an influence on the cell center resdiual of the current element
-        const auto& connectivityMap = gridGeometry.connectivityMap();
-
-        // evaluate derivatives w.r.t. own dof
-        evaluateCellCenterDerivatives(cellCenterGlobalI);
-
-        // evaluate derivatives w.r.t. all other related cell center dofs
-        for (const auto& globalJ : connectivityMap(cellCenterId, cellCenterId, cellCenterGlobalI))
-             evaluateCellCenterDerivatives(globalJ);
-
-        return origResidual;
+       // CCToCC Block is empty for SIMPLE algorithm
     }
 
     /*!
@@ -641,96 +587,47 @@ public:
      * \return The element residual at the current solution.
      */
     template<class JacobianMatrixDiagBlock, class GridVariables>
-    auto assembleFaceJacobianAndResidualImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
+    void assembleFaceCoefficientMatrixAndRHSImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
         assert(domainI == faceId);
 
-        // get some aliases for convenience
-        const auto& problem = this->problem();
-        const auto& element = this->element();
+        // get an alias for convenience
         const auto& fvGeometry = this->fvGeometry();
-        const auto& gridGeometry = this->problem().gridGeometry();
-        const auto& curSol = this->curSol()[domainI];
 
-        using FaceSolutionVector = GetPropType<TypeTag, Properties::FaceSolutionVector>; // TODO: use reserved vector
-        FaceSolutionVector origResiduals;
-        origResiduals.resize(fvGeometry.numScvf());
-        origResiduals = 0.0;
-
-        // treat the local residua of the face dofs:
-        for (auto&& scvf : scvfs(fvGeometry))
-            origResiduals[scvf.localFaceIdx()] = this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
-
-        ///////////////////////////////////////////////////////////////////////////////////////////////////
-        // Calculate derivatives of all face residuals in the element w.r.t. to other face dofs.         //
-        // Note that we do an element-wise assembly, therefore this is only the contribution of the      //
-        // current element while the contribution of the element on the opposite side of the scvf will   //
-        // be added separately.                                                                          //
-        ///////////////////////////////////////////////////////////////////////////////////////////////////
-
+        //fill the coefficentMatrix and RHS
         for (auto&& scvf : scvfs(fvGeometry))
         {
+            this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()]);
+
             // set the actual dof index
             const auto faceGlobalI = scvf.dofIndex();
 
-            using FaceSolution = GetPropType<TypeTag, Properties::StaggeredFaceSolution>;
-            const auto origFaceSolution = FaceSolution(scvf, curSol, gridGeometry);
-
-            // Lambda to evaluate the derivatives for faces
-            auto evaluateFaceDerivatives = [&](const std::size_t globalJ)
+            for(int pvIdx = 0; pvIdx < numEqFace; ++pvIdx)
             {
-                // get the faceVars of the face with respect to which we are going to build the derivative
-                auto& faceVars = getFaceVarAccess_(gridVariables.curGridFaceVars(), this->curElemFaceVars(), scvf);
-                const auto origFaceVars = faceVars;
+                //coefficient in the momentum balance equation of the selfVelocity
+                updateGlobalJacobian_(A, faceGlobalI, scvf.dofIndex(), pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].selfCoefficient);
 
-                for (int pvIdx = 0; pvIdx < numEqFace; ++pvIdx)
+                //coefficient in the momentum balance equation of the oppositeVelocity
+                updateGlobalJacobian_(A, faceGlobalI, scvf.dofIndexOpposingFace(), pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].oppositeCoefficient);
+
+                //coefficients in the momentum balance equation of the parallelVelocities
+                const int numSubFaces = scvf.pairData().size();
+                for (int localSubFaceIdx = 0; localSubFaceIdx < numSubFaces; ++localSubFaceIdx)
                 {
-                    auto faceSolution = origFaceSolution;
+                    const auto& data = scvf.pairData(localSubFaceIdx);
 
-                    auto evalResidual = [&](Scalar priVar)
+                    updateGlobalJacobian_(A, faceGlobalI, data.normalPair.first, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].innerNormalCoefficients[localSubFaceIdx]);
+                    if(data.outerParallelFaceDofIdx >= 0)
                     {
-                        // update the volume variables
-                        faceSolution[globalJ][pvIdx] = priVar;
-                        faceVars.update(faceSolution, problem, element, fvGeometry, scvf);
-
-                        // update the coupling context
-                        this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, faceSolution[globalJ], pvIdx);
-
-                        // compute face residual
-                        return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
-                    };
-
-                    // derive the residuals numerically
-                    FaceResidualValue partialDeriv(0.0);
-                    const auto& paramGroup = problem.paramGroup();
-                    static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                    static const auto eps = this->couplingManager().numericEpsilon(domainI, paramGroup);
-                    NumericDifferentiation::partialDerivative(evalResidual, faceSolution[globalJ][pvIdx], partialDeriv, origResiduals[scvf.localFaceIdx()],
-                                                              eps(faceSolution[globalJ][pvIdx], pvIdx), numDiffMethod);
-
-                    // update the global jacobian matrix with the current partial derivatives
-                    updateGlobalJacobian_(A, faceGlobalI, globalJ, pvIdx, partialDeriv);
-
-                    // restore the original faceVars
-                    faceVars = origFaceVars;
-
-                    // restore the undeflected state of the coupling context
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainI, globalJ, origFaceSolution[globalJ], pvIdx);
+                        updateGlobalJacobian_(A, faceGlobalI, data.outerParallelFaceDofIdx, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].parallelCoefficients[localSubFaceIdx]);
+                        //note on comparing this with StaggeredFreeFlowConnectivityMap computeFaceToCellCenterStencil_: SIMPLE does not consider the normalPair contributions, such terms are included in the right-hand side
+                    }
+                    if(!scvf.boundary()){
+                        updateGlobalJacobian_(A, faceGlobalI, data.normalPair.second, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].outerNormalCoefficients[localSubFaceIdx]);
+                    }
                 }
-            };
-
-            // evaluate derivatives w.r.t. own dof
-            evaluateFaceDerivatives(scvf.dofIndex());
-
-            // get the list of face dofs that have an influence on the resdiual of the current face
-            const auto& connectivityMap = gridGeometry.connectivityMap();
-
-            // evaluate derivatives w.r.t. all other related face dofs
-            for (const auto& globalJ : connectivityMap(faceId, faceId, scvf.index()))
-               evaluateFaceDerivatives(globalJ);
+            }
         }
-
-        return origResiduals;
     }
 
     /*!
@@ -740,13 +637,9 @@ public:
      * \return The element residual at the current solution.
      */
     template<class JacobianBlock, class GridVariables>
-    void assembleJacobianCellCenterCoupling(Dune::index_constant<faceId> domainJ, JacobianBlock& A,
-                                            const CellCenterResidualValue& origResidual, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
+    void assembleCoefficientMatrixCellCenterCoupling(Dune::index_constant<faceId> domainJ, JacobianBlock& A,
+                                            GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
     {
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //  Calculate derivatives of all cell center residuals in the element w.r.t. to all coupled faces dofs //
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         // get some aliases for convenience
         const auto& element = this->element();
         const auto& fvGeometry = this->fvGeometry();
@@ -759,101 +652,18 @@ public:
         {
             const auto globalJ = scvfJ.dofIndex();
 
-            // get the faceVars of the face with respect to which we are going to build the derivative
-            auto& faceVars = getFaceVarAccess_(gridVariables.curGridFaceVars(), this->curElemFaceVars(), scvfJ);
-            const auto origFaceVars(faceVars);
-
             for (int pvIdx = 0; pvIdx < numEqFace; ++pvIdx)
             {
-                auto facePriVars = curSol[globalJ];
-
-                auto evalResidual = [&](Scalar priVar)
-                {
-                    // update the face variables
-                    facePriVars[pvIdx] = priVar;
-                    faceVars.updateOwnFaceOnly(facePriVars);
-
-                    // update the coupling context
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, facePriVars, pvIdx);
-
-                    // compute element residual
-                    return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
-                };
-
-                // create the vector storing the partial derivatives
-                CellCenterResidualValue partialDeriv(0.0);
-
-                // derive the residuals numerically
-                const auto& paramGroup = this->assembler().problem(domainJ).paramGroup();
-                static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                static const auto epsCoupl = this->couplingManager().numericEpsilon(domainJ, paramGroup);
-                NumericDifferentiation::partialDerivative(evalResidual, facePriVars[pvIdx], partialDeriv, origResidual,
-                                                          epsCoupl(facePriVars[pvIdx], pvIdx), numDiffMethod);
-
-                // update the global jacobian matrix with the current partial derivatives
-                updateGlobalJacobian_(A, cellCenterGlobalI, globalJ, pvIdx, partialDeriv);
-
-                // restore the original faceVars
-                faceVars = origFaceVars;
-
-                // restore the undeflected state of the coupling context
-                this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, curSol[globalJ], pvIdx);
+                //fill the coefficientMatrix
+                updateGlobalJacobian_(A, cellCenterGlobalI, globalJ, pvIdx, simpleMassBalanceSummands.coefficients[scvfJ.localFaceIdx()]);
             }
         }
     }
 
     template<std::size_t otherId, class JacobianBlock, class GridVariables>
-    void assembleJacobianCellCenterCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
+    void assembleCoefficientMatrixCellCenterCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
                                             const CellCenterResidualValue& res, GridVariables& gridVariables, SimpleMassBalanceSummands& simpleMassBalanceSummands)
-    {
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //  Calculate derivatives of all cell center residuals in the element w.r.t. all dofs in the coupling stencil. //
-        /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // get some aliases for convenience
-        const auto& element = this->element();
-
-        // get stencil informations
-        const auto& stencil = this->couplingManager().couplingStencil(domainI, element, domainJ);
-
-        if (stencil.empty())
-            return;
-
-        for (const auto globalJ : stencil)
-        {
-            const auto origResidual = this->couplingManager().evalCouplingResidual(domainI, *this, domainJ, globalJ);
-            const auto& curSol = this->curSol()[domainJ];
-            const auto origPriVarsJ = curSol[globalJ];
-
-            for (int pvIdx = 0; pvIdx < JacobianBlock::block_type::cols; ++pvIdx)
-            {
-                auto evalCouplingResidual = [&](Scalar priVar)
-                {
-                    auto deflectedPriVarsJ = origPriVarsJ;
-                    deflectedPriVarsJ[pvIdx] = priVar;
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, deflectedPriVarsJ, pvIdx);
-                    return this->couplingManager().evalCouplingResidual(domainI, *this, domainJ, globalJ);
-                };
-
-                // create the vector storing the partial derivatives
-                CellCenterResidualValue partialDeriv(0.0);
-
-                // derive the residuals numerically
-                const auto& paramGroup = this->assembler().problem(domainJ).paramGroup();
-                static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                static const auto epsCoupl = this->couplingManager().numericEpsilon(domainJ, paramGroup);
-                NumericDifferentiation::partialDerivative(evalCouplingResidual, origPriVarsJ[pvIdx], partialDeriv, origResidual,
-                                                          epsCoupl(origPriVarsJ[pvIdx], pvIdx), numDiffMethod);
-
-                // update the global stiffness matrix with the current partial derivatives
-                const auto cellCenterGlobalI = this->problem().gridGeometry().elementMapper().index(element);
-                updateGlobalJacobian_(A, cellCenterGlobalI, globalJ, pvIdx, partialDeriv);
-
-                // restore the undeflected state of the coupling context
-                this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, origPriVarsJ, pvIdx);
-            }
-        }
-    }
+    {}
 
     /*!
      * \brief Computes the derivatives with respect to the given element and adds them
@@ -861,20 +671,17 @@ public:
      *
      * \return The element residual at the current solution.
      */
-    template<class JacobianBlock, class ElementResidualVector, class GridVariables>
-    void assembleJacobianFaceCoupling(Dune::index_constant<cellCenterId> domainJ, JacobianBlock& A,
+    template<class JacobianBlock, class GridVariables>
+    void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<cellCenterId> domainJ, JacobianBlock& A,
                                       const ElementResidualVector& origResiduals, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
-    {
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
-        //  Calculate derivatives of all face residuals in the element w.r.t. all coupled cell center dofs //
-        /////////////////////////////////////////////////////////////////////////////////////////////////////
+    {}
 
-        // get some aliases for convenience
-        const auto& problem = this->problem();
+    template<std::size_t otherId, class JacobianBlock, class GridVariables>
+    void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
+                                      GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
+    {
+        // get an alias for convenience
         const auto& fvGeometry = this->fvGeometry();
-        const auto& gridGeometry = this->problem().gridGeometry();
-        const auto& connectivityMap = gridGeometry.connectivityMap();
-        const auto& curSol = this->curSol()[domainJ];
 
         // build derivatives with for cell center dofs w.r.t. cell center dofs
         for (auto&& scvf : scvfs(fvGeometry))
@@ -882,114 +689,10 @@ public:
             // set the actual dof index
             const auto faceGlobalI = scvf.dofIndex();
 
-            // build derivatives with for face dofs w.r.t. cell center dofs
-            for (const auto& globalJ : connectivityMap(faceId, cellCenterId, scvf.index()))
+            for(int pvIdx = 0; pvIdx < numEqCellCenter; ++pvIdx)
             {
-                // get the volVars of the element with respect to which we are going to build the derivative
-                auto&& scvJ = fvGeometry.scv(globalJ);
-                const auto elementJ = fvGeometry.gridGeometry().element(globalJ);
-                auto& curVolVars = this->getVolVarAccess(gridVariables.curGridVolVars(), this->curElemVolVars(), scvJ);
-                const auto origVolVars(curVolVars);
-                const auto origCellCenterPriVars = curSol[globalJ];
-
-                for (int pvIdx = 0; pvIdx < numEqCellCenter; ++pvIdx)
-                {
-                    using PrimaryVariables = typename VolumeVariables::PrimaryVariables;
-                    PrimaryVariables priVars = makePriVarsFromCellCenterPriVars<PrimaryVariables>(origCellCenterPriVars);
-
-                    constexpr auto offset = PrimaryVariables::dimension - CellCenterPrimaryVariables::dimension;
-
-                    auto evalResidual = [&](Scalar priVar)
-                    {
-                        // update the volume variables
-                        priVars[pvIdx + offset] = priVar;
-                        auto elemSol = elementSolution<FVElementGeometry>(std::move(priVars));
-                        curVolVars.update(elemSol, problem, elementJ, scvJ);
-
-                        // update the coupling context
-                        auto deflectedCellCenterPriVars = origCellCenterPriVars;
-                        deflectedCellCenterPriVars[pvIdx] = priVar;
-                        this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, deflectedCellCenterPriVars, pvIdx);
-
-                        // compute face residual
-                        return this->evalLocalResidualForFace(scvf, simpleMomentumBalanceSummands);
-                    };
-
-                    // derive the residuals numerically
-                    FaceResidualValue partialDeriv(0.0);
-                    const auto& paramGroup = this->assembler().problem(domainJ).paramGroup();
-                    static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                    static const auto epsCoupl = this->couplingManager().numericEpsilon(domainJ, paramGroup);
-                    NumericDifferentiation::partialDerivative(evalResidual, priVars[pvIdx + offset], partialDeriv, origResiduals[scvf.localFaceIdx()],
-                                                              epsCoupl(priVars[pvIdx + offset], pvIdx), numDiffMethod);
-
-                    // update the global jacobian matrix with the current partial derivatives
-                    updateGlobalJacobian_(A, faceGlobalI, globalJ, pvIdx, partialDeriv);
-
-                    // restore the original volVars
-                    curVolVars = origVolVars;
-
-                    // restore the undeflected state of the coupling context
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, origCellCenterPriVars, pvIdx);
-                }
-            }
-        }
-    }
-
-    template<std::size_t otherId, class JacobianBlock, class ElementResidualVector, class GridVariables>
-    void assembleJacobianFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
-                                      const ElementResidualVector& res, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
-    {
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////
-        //  Calculate derivatives of all face residuals in the element w.r.t. all dofs in the coupling stencil. //
-        //////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        // get some aliases for convenience
-        const auto& fvGeometry = this->fvGeometry();
-        const auto& curSol = this->curSol()[domainJ];
-
-        // build derivatives with for cell center dofs w.r.t. cell center dofs
-        for (auto&& scvf : scvfs(fvGeometry))
-        {
-            // set the actual dof index
-            const auto faceGlobalI = scvf.dofIndex();
-
-            // get stencil informations
-            const auto& stencil = this->couplingManager().couplingStencil(domainI, scvf, domainJ);
-
-            if (stencil.empty())
-                continue;
-
-            // build derivatives with for face dofs w.r.t. cell center dofs
-            for (const auto& globalJ : stencil)
-            {
-                const auto origPriVarsJ = curSol[globalJ];
-                const auto origResidual = this->couplingManager().evalCouplingResidual(domainI, scvf, *this, domainJ, globalJ);
-
-                for (int pvIdx = 0; pvIdx < JacobianBlock::block_type::cols; ++pvIdx)
-                {
-                    auto evalCouplingResidual = [&](Scalar priVar)
-                    {
-                        auto deflectedPriVars = origPriVarsJ;
-                        deflectedPriVars[pvIdx] = priVar;
-                        this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, deflectedPriVars, pvIdx);
-                        return this->couplingManager().evalCouplingResidual(domainI, scvf, *this, domainJ, globalJ);
-                    };
-
-                    // derive the residuals numerically
-                    FaceResidualValue partialDeriv(0.0);
-                    const auto& paramGroup = this->assembler().problem(domainJ).paramGroup();
-                    static const int numDiffMethod = getParamFromGroup<int>(paramGroup, "Assembly.NumericDifferenceMethod");
-                    static const auto epsCoupl = this->couplingManager().numericEpsilon(domainJ, paramGroup);
-                    NumericDifferentiation::partialDerivative(evalCouplingResidual, origPriVarsJ[pvIdx], partialDeriv, origResidual,
-                                                              epsCoupl(origPriVarsJ[pvIdx], pvIdx), numDiffMethod);
-
-                    // update the global stiffness matrix with the current partial derivatives
-                    updateGlobalJacobian_(A, faceGlobalI, globalJ, pvIdx, partialDeriv);
-
-                    // restore the undeflected state of the coupling context
-                    this->couplingManager().updateCouplingContext(domainI, *this, domainJ, globalJ, origPriVarsJ, pvIdx);
-                }
+//note on comparing this with StaggeredFreeFlowConnectivityMap computeFaceToCellCenterStencil_: SIMPLE does not consider outerParallelElements, such terms are included in velocity coefficients
+                updateGlobalJacobian_(A, faceGlobalI, scvf.insideScvIdx(), pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].pressureCoefficient);
             }
         }
     }
@@ -1023,16 +726,6 @@ public:
             assert(pvIdx < matrix[globalI][globalJ][eqIdx].size());
             matrix[globalI][globalJ][eqIdx][pvIdx] += partialDeriv[eqIdx];
         }
-    }
-
-private:
-
-    FaceVariables& getFaceVarAccess_(GridFaceVariables& gridFaceVariables, ElementFaceVariables& elemFaceVars, const SubControlVolumeFace& scvf)
-    {
-        if constexpr (getPropValue<TypeTag, Properties::EnableGridFaceVariablesCache>())
-            return gridFaceVariables.faceVars(scvf.index());
-        else
-            return elemFaceVars[scvf];
     }
 };
 

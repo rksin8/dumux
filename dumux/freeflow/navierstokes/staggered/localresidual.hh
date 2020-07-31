@@ -102,12 +102,11 @@ public:
                                                         const ElementVolumeVariables& elemVolVars,
                                                         const ElementFaceVariables& elemFaceVars,
                                                         const SubControlVolumeFace &scvf,
-                                                        const ElementFluxVariablesCache& elemFluxVarsCache,
-                                  SimpleMassBalanceSummands& simpleMassBalanceSummands) const
+                                                        const ElementFluxVariablesCache& elemFluxVarsCache) const
     {
         FluxVariables fluxVars;
         CellCenterPrimaryVariables flux = fluxVars.computeMassFlux(problem, element, fvGeometry, elemVolVars,
-                                                                   elemFaceVars, scvf, elemFluxVarsCache[scvf], simpleMassBalanceSummands);
+                                                                   elemFaceVars, scvf, elemFluxVarsCache[scvf]);
 
         EnergyLocalResidual::heatFlux(flux, problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf);
 
@@ -147,19 +146,6 @@ public:
 
         EnergyLocalResidual::fluidPhaseStorage(storage, volVars);
 
-        return storage;
-    }
-
-    //! Evaluate the storage term for the face control volume.
-    void computeStorageForFace(const Problem& problem,
-                                               const SubControlVolumeFace& scvf,
-                                               const VolumeVariables& volVars,
-                                               const ElementFaceVariables& elemFaceVars,
-                                              SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
-    {
-        FacePrimaryVariables storage(0.0);
-        const Scalar velocity = elemFaceVars[scvf].velocitySelf();
-        storage[0] = volVars.density() * velocity;
         return storage;
     }
 
@@ -215,7 +201,7 @@ public:
 
             // no fluxes occur over symmetry boundaries
             if (bcTypes.isSymmetry())
-                return result;
+                return;
 
             // treat Dirichlet and outflow BCs
             result = computeFluxForCellCenter(problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf, elemFluxVarsCache, simpleMassBalanceSummands);
@@ -230,14 +216,25 @@ public:
                 for (int eqIdx = 0; eqIdx < numEqCellCenter; ++eqIdx)
                 {
                     if (bcTypes.isNeumann(eqIdx + cellCenterOffset))
-                        result[eqIdx] = neumannFluxes[eqIdx + cellCenterOffset] * extrusionFactor * Extrusion::area(scvf);
+                    {
+                        result[eqIdx] = 0.0;
+                        simpleMassBalanceSummands.RHS[eqIdx] -= neumannFluxes[eqIdx + cellCenterOffset] * extrusionFactor * Extrusion::area(scvf);
+                    }
                 }
             }
 
-            // account for wall functions, if used
-            incorporateWallFunction_(result, problem, element, fvGeometry, scvf, elemVolVars, elemFaceVars);
+            //non-Dirichlet case
+            if(!bcTypes.isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                simpleMassBalanceSummands.coefficients[scvf.localFaceIdx()] += boundaryFlux;
+            }
+            //Dirichlet case
+            else{
+                simpleMassBalanceSummands.RHS[scvf.localFaceIdx()] -= boundaryFlux;
+            }
+
+//             // account for wall functions, if used
+//             incorporateWallFunction_(result, problem, element, fvGeometry, scvf, elemVolVars, elemFaceVars);
         }
-        return result;
     }
 
     /*!
@@ -259,19 +256,10 @@ public:
             const auto bcTypes = problem.boundaryTypes(element, scvf);
 
             if(bcTypes.isDirichlet(Indices::velocity(scvf.directionIndex())))
-            {
-                // set a fixed value for the velocity for Dirichlet boundary conditions
-                const Scalar velocity = elemFaceVars[scvf].velocitySelf();
-                const Scalar dirichletValue = problem.dirichlet(element, scvf)[Indices::velocity(scvf.directionIndex())];
-                residual = velocity - dirichletValue;
-            }
+            {}
             else if(bcTypes.isSymmetry())
             {
-                // for symmetry boundary conditions, there is no flow accross the boundary and
-                // we therefore treat it like a Dirichlet boundary conditions with zero velocity
-                const Scalar velocity = elemFaceVars[scvf].velocitySelf();
-                const Scalar fixedValue = 0.0;
-                residual = velocity - fixedValue;
+                std::cout << "Symmetry boundary conditions not implemented for SIMPLE." << std::endl;
             }
         }
     }
@@ -302,23 +290,22 @@ public:
                 // the source term has already been accounted for, here we
                 // add a given Neumann flux for the face on the boundary itself ...
                 const auto extrusionFactor = elemVolVars[scvf.insideScvIdx()].extrusionFactor();
-                result = problem.neumann(element, fvGeometry, elemVolVars, elemFaceVars, scvf)[Indices::velocity(scvf.directionIndex())]
+                simpleMomentumBalanceSummands.RHS -= problem.neumann(element, fvGeometry, elemVolVars, elemFaceVars, scvf)[Indices::velocity(scvf.directionIndex())]
                                          * extrusionFactor * Extrusion::area(scvf);
 
                 // ... and treat the fluxes of the remaining (frontal and lateral) faces of the staggered control volume
-                result += fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
+                fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
             }
             else if(bcTypes.isDirichlet(Indices::pressureIdx))
             {
                 // we are at an "fixed pressure" boundary for which the resdiual of the momentum balance needs to be assembled
                 // as if it where inside the domain and not on the boundary (source term has already been acounted for)
-                result = fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
+                fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
 
                 // incorporate the inflow or outflow contribution
-                result += fluxVars.inflowOutflowBoundaryFlux(problem, element, scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
+                fluxVars.inflowOutflowBoundaryFlux(problem, element, scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
             }
         }
-        return result;
     }
 
 private:
