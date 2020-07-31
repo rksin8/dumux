@@ -452,7 +452,7 @@ public:
 
                                 if (scvf.isLateral())
                                 {
-                                    const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                                    const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                                     if (orthogonalScvf.insideScvIdx() == scvJ.index() || orthogonalScvf.outsideScvIdx() == scvJ.index())
                                     {
                                         evalFlux(residual, scvf);
@@ -483,7 +483,7 @@ public:
 
                                 if (scvf.isLateral())
                                 {
-                                    const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                                    const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                                     if (orthogonalScvf.insideScvIdx() == scvJ.index() || orthogonalScvf.outsideScvIdx() == scvJ.index())
                                     {
                                         evalFlux(result, scvf);
