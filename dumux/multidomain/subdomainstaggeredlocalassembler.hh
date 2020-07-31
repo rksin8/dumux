@@ -152,7 +152,7 @@ public:
      * \brief Convenience function to evaluate the complete local residual for the current element. Automatically chooses the the appropriate
      *        element volume variables.
      */
-    void evalLocalResidualForCellCenter(SimpleMassBalanceSummands& simpleMassBalanceSummands) const
+    CellCenterResidualValue evalLocalResidualForCellCenter(SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
         if (!isImplicit)
             if (this->assembler().isStationaryProblem())
@@ -160,6 +160,7 @@ public:
 
         if (this->elementIsGhost())
         {
+            simpleMassBalanceSummands.setToZero(this->element(), this->fvGeometry());
             return CellCenterResidualValue(0.0);
         }
 
@@ -172,7 +173,7 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    void evalLocalResidualForCellCenter(const ElementVolumeVariables& elemVolVars,
+    CellCenterResidualValue evalLocalResidualForCellCenter(const ElementVolumeVariables& elemVolVars,
                                                            const ElementFaceVariables& elemFaceVars,
                                         SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
@@ -234,7 +235,7 @@ public:
      *        element volume and face variables.
      * \param scvf The sub control volume face
      */
-    void evalLocalResidualForFace(const SubControlVolumeFace& scvf, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
+    FaceResidualValue evalLocalResidualForFace(const SubControlVolumeFace& scvf, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         if (!isImplicit)
             if (this->assembler().isStationaryProblem())
@@ -242,6 +243,7 @@ public:
 
         if (this->elementIsGhost())
         {
+            simpleMomentumBalanceSummands.setToZero();
             return FaceResidualValue(0.0);
         }
 
@@ -255,7 +257,7 @@ public:
      * \param elemVolVars The element volume variables
      * \param elemFaceVars The element face variables
      */
-    void evalLocalResidualForFace(const SubControlVolumeFace& scvf,
+    FaceResidualValue evalLocalResidualForFace(const SubControlVolumeFace& scvf,
                                                const ElementVolumeVariables& elemVolVars,
                                                const ElementFaceVariables& elemFaceVars,
                                   SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
@@ -527,14 +529,14 @@ class SubDomainStaggeredLocalAssembler<id, TypeTag, Assembler, DiffMethod::numer
 public:
     using ParentType::ParentType;
 
-    void assembleCellCenterResidualImpl()
+    CellCenterResidualValue assembleCellCenterResidualImpl()
     {
         SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
 
         return this->evalLocalResidualForCellCenter(simpleMassBalanceSummands);
     }
 
-    void assembleFaceResidualImpl(const SubControlVolumeFace& scvf)
+    FaceResidualValue assembleFaceResidualImpl(const SubControlVolumeFace& scvf)
     {
         SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
 

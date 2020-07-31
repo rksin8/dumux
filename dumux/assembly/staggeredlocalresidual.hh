@@ -90,7 +90,7 @@ public:
                                                            const ElementFluxVariablesCache& elemFluxVarsCache,
                                                            SimpleMassBalanceSummands& simpleMassBalanceSummands) const
     {
-        CellCenterResidualValue residual(0.0);
+        simpleMassBalanceSummands.setToZero(element, fvGeometry);
 
         // evaluate the source term
         for (auto&& scv : scvs(fvGeometry))
@@ -217,7 +217,8 @@ public:
                                                const SubControlVolumeFace& scvf,
                                   SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
-        FaceResidualValue residual(0.0);
+        simpleMomentumBalanceSummands.setToZero(scvf);
+
         asImp().evalSourceForFace(simpleMomentumBalanceSummands, this->problem(), element, fvGeometry, elemVolVars, elemFaceVars, scvf);
         asImp().evalFluxForFace(simpleMomentumBalanceSummands, this->problem(), element, fvGeometry, elemVolVars, elemFaceVars, bcTypes, elemFluxVarsCache, scvf);
 
