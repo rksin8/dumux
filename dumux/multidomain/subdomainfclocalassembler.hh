@@ -515,7 +515,7 @@ public:
 
                             if (scvf.isLateral())
                             {
-                                const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                                const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                                 if (orthogonalScvf.insideScvIdx() == scvJ.index() || orthogonalScvf.outsideScvIdx() == scvJ.index())
                                 {
                                     evalFlux(residual, scvf);
@@ -543,7 +543,7 @@ public:
 
                             if (scvf.isLateral())
                             {
-                                const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                                const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                                 if (orthogonalScvf.insideScvIdx() == scvJ.index() || orthogonalScvf.outsideScvIdx() == scvJ.index())
                                 {
                                     evalFlux(result, scvf);
@@ -674,10 +674,7 @@ public:
                     // TODO internal constraints
                     if (scv.boundary() && this->elemBcTypes().hasDirichlet())
                     {
-                        auto scvfIter = scvfs(fvGeometry, scv).begin();
-                        ++scvfIter;
-                        const auto frontalScvfOnBoundary  = *scvfIter; //TODO convenience function
-                        const auto bcTypes = this->elemBcTypes()[frontalScvfOnBoundary.localIndex()];
+                        const auto bcTypes = this->elemBcTypes()[fvGeometry.frontalScvfOnBoundary(scv).localIndex()];
                         if (bcTypes.hasDirichlet())
                         {
                             // If the dof is coupled by a Dirichlet condition,
