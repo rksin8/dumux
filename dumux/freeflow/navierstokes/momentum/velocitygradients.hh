@@ -140,7 +140,7 @@ public:
                                const ElemVolVars& elemVolVars)
     {
         assert(scvf.isLateral());
-        const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+        const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
 
         const auto innerVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
         const auto outerVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
