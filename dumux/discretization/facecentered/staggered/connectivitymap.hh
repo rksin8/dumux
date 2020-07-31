@@ -100,7 +100,7 @@ public:
                     // |c|
                     // |v| insideScv
                     // |f|
-                    const auto& orthogonalScvf = fvGeometry.scvfWithCommonEntity(scvf);
+                    const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
                     assert(orthogonalScvf.isLateral());
                     map_[ownScvIndex].push_back(fvGeometry.scv(orthogonalScvf.insideScvIdx()).index());
                     if (!orthogonalScvf.boundary())
