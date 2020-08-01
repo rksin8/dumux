@@ -61,14 +61,28 @@ public:
      * \endverbatim
      */
     template<class FaceVariables>
-    static Scalar velocityGradII(const SubControlVolumeFace& scvf,
-                                 const FaceVariables& faceVars)
+    void velocityGradII(const Problem& problem,
+                                 const SubControlVolumeFace& scvf,
+                                 const FaceVariables& faceVars,
+                                 SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
+                                 Scalar factor)
     {
-        // The velocities of the dof at interest and the one of the opposite scvf.
-        const Scalar velocitySelf = faceVars.velocitySelf();
-        const Scalar velocityOpposite = faceVars.velocityOpposite();
+        if(scvf.boundary() && problem.boundaryTypes(element, scvf).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+            simpleMomentumBalanceSummands.RHS -= faceVars.velocitySelf() * factor;;
+        }
+        else {
+            simpleMomentumBalanceSummands.selfCoefficient += factor;;
+        }
 
-        return ((velocityOpposite - velocitySelf) / scvf.selfToOppositeDistance()) * scvf.directionSign();
+        const auto eIdx = scvf.insideScvIdx();
+        const auto opposingFace = fvGeometry.scvf(eIdx, scvf.localIdxOpposingFace());
+
+        if(opposingFace.boundary() && problem.boundaryTypes(element, opposingFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+            simpleMomentumBalanceSummands.RHS += faceVars.velocityOpposite()*factor;
+        }
+        else {
+            simpleMomentumBalanceSummands.oppositeCoefficient -= factor;
+        }
     }
 
     /*!
@@ -95,47 +109,54 @@ public:
      * \endverbatim
      */
     template<class Problem, class FaceVariables>
-    static Scalar velocityGradIJ(const Problem& problem,
+    void velocityGradIJ(const Problem& problem,
                                  const Element& element,
                                  const FVElementGeometry& fvGeometry,
                                  const SubControlVolumeFace& scvf,
                                  const FaceVariables& faceVars,
                                  const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
                                  const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
-                                 const std::size_t localSubFaceIdx)
+                                 const std::size_t localSubFaceIdx,
+                                 SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
+                                 Scalar factor)
     {
+        factor *= lateralScvf.directionSign();
+        factor /= scvf.parallelDofsDistance(localSubFaceIdx, 0);
+
         const auto eIdx = scvf.insideScvIdx();
         const auto& lateralScvf = fvGeometry.scvf(eIdx, scvf.pairData(localSubFaceIdx).localLateralFaceIdx);
 
-        // For the velocityGrad_ij derivative, get the velocities at the current (own) scvf
-        // and at the parallel one at the neighboring scvf.
-        const Scalar innerParallelVelocity = faceVars.velocitySelf();
-
-        const auto outerParallelVelocity = [&]()
+        if (!(lateralScvf.boundary() && problem.boundaryTypes(element, lateralScvf).isOutflow(Indices::velocity(scvf.directionIndex()))))
         {
-            if (!lateralScvf.boundary())
-                return faceVars.velocityParallel(localSubFaceIdx, 0);
-            else if (lateralFaceBoundaryTypes->isDirichlet(Indices::velocity(scvf.directionIndex())))
-            {
-                // Sample the value of the Dirichlet BC at the center of the staggered lateral face.
-                const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
-                const auto lateralBoundaryFace = makeStaggeredBoundaryFace(lateralScvf, lateralBoundaryFacePos);
-                return problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(scvf.directionIndex())];
-            }
-            else if (lateralFaceBoundaryTypes->isBeaversJoseph(Indices::velocity(scvf.directionIndex())))
-            {
-                return beaversJosephVelocityAtLateralScvf(problem, element, fvGeometry, scvf,  faceVars,
-                                                          currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx);
-            }
-            else
-                DUNE_THROW(Dune::InvalidStateException, "Invalid lateral boundary type at " << lateralScvf.center());
-        }();
+            const Scalar innerParallelVelocity = faceVars.velocitySelf();
+            simpleMomentumBalanceSummands.RHS -= factor* innerParallelVelocity;
+        }
+        else
+        {
+           simpleMomentumBalanceSummands.selfCoefficient += factor;
+        }
 
-        // The velocity gradient already accounts for the orientation
-        // of the staggered face's outer normal vector. This also correctly accounts for the reduced
-        // distance used in the gradient if the lateral scvf lies on a boundary.
-        return (outerParallelVelocity - innerParallelVelocity)
-               / scvf.parallelDofsDistance(localSubFaceIdx, 0) * lateralScvf.directionSign();
+        if (!lateralScvf.boundary())
+        {
+            const auto parallelFace = fvGeometry.scvf(normalFace.outsideScvIdx(), scvf.localFaceIdx());
+            if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                simpleMomentumBalanceSummands.RHS += factor * faceVars.velocityParallel(localSubFaceIdx, 0);
+            }
+            else{
+                simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] -= factor;
+            }
+        }
+        else if (lateralFaceBoundaryTypes->isDirichlet(Indices::velocity(scvf.directionIndex())))
+        {
+            // Sample the value of the Dirichlet BC at the center of the staggered lateral face.
+            const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
+            const auto lateralBoundaryFace = makeStaggeredBoundaryFace(lateralScvf, lateralBoundaryFacePos);
+            simpleMomentumBalanceSummands.RHS += factor * problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(scvf.directionIndex())];
+        }
+        else
+        {
+            DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for other boundary types");
+        }
     }
 
     /*!
@@ -170,53 +191,61 @@ public:
      * \endverbatim
      */
     template<class Problem, class FaceVariables>
-    static Scalar velocityGradJI(const Problem& problem,
+    void velocityGradJI(const Problem& problem,
                                  const Element& element,
                                  const FVElementGeometry& fvGeometry,
                                  const SubControlVolumeFace& scvf,
                                  const FaceVariables& faceVars,
                                  const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
                                  const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
-                                 const std::size_t localSubFaceIdx)
+                                 const std::size_t localSubFaceIdx,
+                                 SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
+                                 Scalar factor)
     {
+        // For the velocityGrad_ji gradient, get the velocities perpendicular to the velocity at the current scvf.
+        // The inner one is located at staggered face within the own element,
+        // the outer one at the respective staggered face of the element on the other side of the
+        // current scvf.
+
         const auto eIdx = scvf.insideScvIdx();
         const auto& lateralScvf = fvGeometry.scvf(eIdx, scvf.pairData(localSubFaceIdx).localLateralFaceIdx);
 
         // Assume a zero velocity gradient for pressure boundary conditions.
         if (currentScvfBoundaryTypes && currentScvfBoundaryTypes->isDirichlet(Indices::pressureIdx))
-            return 0.0;
+            return;
 
-        // For the velocityGrad_ji gradient, get the velocities perpendicular to the velocity at the current scvf.
-        // The inner one is located at staggered face within the own element,
-        // the outer one at the respective staggered face of the element on the other side of the
-        // current scvf.
-        const Scalar innerLateralVelocity = faceVars.velocityLateralInside(localSubFaceIdx);
-        const Scalar outerLateralVelocity = [&]()
+        factor /= scvf.pairData(localSubFaceIdx).lateralDistance;
+        if (scvf.normalInPosCoordDir())
+            factor *= -1;
+
+        if (lateralScvf.boundary() && problem.boundaryTypes(element, lateralScvf).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+            const Scalar innerLateralVelocity = faceVars.velocityLateralInside(localSubFaceIdx);
+            simpleMomentumBalanceSummands.RHS += factor * innerLateralVelocity;
+        }
+        else{
+            simpleMomentumBalanceSummands.innerNormalCoefficients[localSubFaceIdx] -= factor;
+        }
+
+        if (!scvf.boundary())
         {
-            if (!scvf.boundary())
-                return faceVars.velocityLateralOutside(localSubFaceIdx);
-            else if (currentScvfBoundaryTypes->isDirichlet(Indices::velocity(lateralScvf.directionIndex())))
-            {
-                // Sample the value of the Dirichlet BC at the center of the lateral face intersecting with the boundary.
-                const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
-                const auto lateralBoundaryFace = makeStaggeredBoundaryFace(scvf, lateralBoundaryFacePos);
-                return problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(lateralScvf.directionIndex())];
+            if(outerNormalFace.boundary() && problem.boundaryTypes(element, outerNormalFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                simpleMomentumBalanceSummands.RHS -= factor * faceVars.velocityLateralOutside(localSubFaceIdx);
             }
-            else if (currentScvfBoundaryTypes->isBeaversJoseph(Indices::velocity(lateralScvf.directionIndex())))
-            {
-                return beaversJosephVelocityAtCurrentScvf(problem, element, fvGeometry, scvf,  faceVars,
-                                                          currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx);
+            else{
+                simpleMomentumBalanceSummands.outerNormalCoefficients[localSubFaceIdx] += factor;
             }
-            else
-                DUNE_THROW(Dune::InvalidStateException, "Invalid lateral boundary types at " << lateralScvf.center());
-        }();
-
-        // Calculate the velocity gradient in positive coordinate direction.
-        const Scalar lateralDeltaV = scvf.normalInPosCoordDir()
-                                    ? (outerLateralVelocity - innerLateralVelocity)
-                                    : (innerLateralVelocity - outerLateralVelocity);
-
-        return lateralDeltaV / scvf.pairData(localSubFaceIdx).lateralDistance;
+        }
+        else if (currentScvfBoundaryTypes->isDirichlet(Indices::velocity(lateralScvf.directionIndex())))
+        {
+            // Sample the value of the Dirichlet BC at the center of the lateral face intersecting with the boundary.
+            const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
+            const auto lateralBoundaryFace = makeStaggeredBoundaryFace(scvf, lateralBoundaryFacePos);
+            simpleMomentumBalanceSummands.RHS -= factor * problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(lateralScvf.directionIndex())];
+        }
+        else
+        {
+            DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for this boundary type ";
+        }
     }
 
     /*!

@@ -199,17 +199,42 @@ private:
      */
     void getFrontalFirstOrderUpwindMomenta_(const Scalar density, bool selfIsUpstream, Scalar factor) const
     {
-        std::array<Scalar, 2> upwindMomenta;
-
-        const Scalar momentumSelf = faceVars_.velocitySelf() * density;
-        const Scalar momentumOpposite = faceVars_.velocityOpposite() * density;
+        //upwind factors
+        Scalar selfUpwindFactor;
+        Scalar oppositeUpwindFactor;
+        static const Scalar getLateralFirstOrderUpwindMomentaUpwindWeight = getParamFromGroup<Scalar>(paramGroup, "Flux.UpwindWeight");//thought static might require unique name
+        Scalar upwindWeight = getLateralFirstOrderUpwindMomentaUpwindWeight;//just for shorter name
         if (selfIsUpstream)
-            upwindMomenta = {momentumOpposite, momentumSelf};
+        {
+            selfUpwindFactor = upwindWeight;
+            oppositeUpwindFactor = 1.0 - upwindWeight;
+        }
         else
-            upwindMomenta = {momentumSelf, momentumOpposite};
+        {
+            selfUpwindFactor = 1.0 - upwindWeight;
+            oppositeUpwindFactor = upwindWeight;
+        }
 
-        upwindWeight_ = getParamFromGroup<Scalar>(paramGroup, "Flux.UpwindWeight");
-        return (upwindWeight_ * upwindMomenta[1] + (1.0 - upwindWeight_) * upwindMomenta[0])* factor;
+        //self
+        if (scvf.boundary() && problem.boundaryTypes(element, scvf).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                simpleMomentumBalanceSummands.RHS -= selfUpwindFactor * faceVars_.velocitySelf() * density * factor;
+        }
+        else {
+                simpleMomentumBalanceSummands.selfCoefficient += selfUpwindFactor * density * factor;
+        }
+
+        //opposite
+        const auto eIdx = scvf.insideScvIdx();
+        const auto opposingFace = fvGeometry.scvf(eIdx, scvf.localIdxOpposingFace());
+
+        if (opposingFace.boundary() && problem.boundaryTypes(element, opposingFace).isDirichlet(Indices::velocity(scvf.directionIndex())))
+        {
+            simpleMomentumBalanceSummands.RHS -= oppositeUpwindFactor * faceVars_.velocityOpposite() * density * factor;
+        }
+        else
+        {
+            simpleMomentumBalanceSummands.oppositeCoefficient += oppositeUpwindFactor * density * factor;
+        }
     }
 
     /*!
@@ -325,8 +350,6 @@ private:
                                                              const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
                                             Scalar factor) const
     {
-        std::array<Scalar, 2> upwindMomenta;
-
         // If the lateral face lies on a boundary, we assume that the parallel velocity on the boundary is actually known,
         // thus we always use this value for the computation of the transported momentum.
         if (!scvf_.hasParallelNeighbor(localSubFaceIdx, 0))
@@ -334,7 +357,7 @@ private:
             const Scalar boundaryVelocity = getParallelVelocityFromBoundary_(element_, scvf_, faceVars_, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx);
             const Scalar boundaryMomentum = boundaryVelocity*insideDensity;
 
-            simpleMomentumBalanceSummands.RHS -= boundaryMomentum* factor;
+            simpleMomentumBalanceSummands.RHS -= boundaryMomentum * factor;
         }
 
         //upwind factors
