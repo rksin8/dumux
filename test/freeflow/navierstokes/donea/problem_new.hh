@@ -124,39 +124,16 @@ public:
     DoneaTestProblemNew(std::shared_ptr<const GridGeometry> gridGeometry, std::shared_ptr<CouplingManager> couplingManager)
     : ParentType(gridGeometry, couplingManager)
     , couplingManager_(couplingManager)
-    {
-        printL2Error_ = getParam<bool>("Problem.PrintL2Error");
-    }
+    {}
 
     DoneaTestProblemNew(std::shared_ptr<const GridGeometry> gridGeometry)
     : ParentType(gridGeometry)
-    {
-        printL2Error_ = getParam<bool>("Problem.PrintL2Error");
-    }
+    {}
 
    /*!
      * \name Problem parameters
      */
     // \{
-
-    // void printL2Error(const SolutionVector& curSol) const
-    // {
-    //     if(printL2Error_)
-    //     {
-    //         using L2Error = NavierStokesTestL2Error<Scalar, ModelTraits, PrimaryVariables>;
-    //         const auto l2error = L2Error::calculateL2Error(*this, curSol);
-    //         const int numCellCenterDofs = this->gridGeometry().gridView().size(0);
-    //         const int numFaceDofs = this->gridGeometry().numDofs();
-    //         std::cout << std::setprecision(8) << "** L2 error (abs/rel) for "
-    //                 << std::setw(6) << numCellCenterDofs << " cc dofs and " << numFaceDofs << " face dofs (total: " << numCellCenterDofs + numFaceDofs << "): "
-    //                 << std::scientific
-    //                 << "L2(p) = " << l2error.first[/*Indices::pressureIdx*/0] << " / " << l2error.second[/*Indices::pressureIdx*/0]
-    //                 << " , L2(vx) = " << l2error.first[Indices::velocityXIdx] << " / " << l2error.second[Indices::velocityXIdx]
-    //                 << " , L2(vy) = " << l2error.first[Indices::velocityYIdx] << " / " << l2error.second[Indices::velocityYIdx]
-    //                 << std::endl;
-    //     }
-    // }
-
    /*!
      * \brief Return the temperature within the domain in [K].
      *
@@ -229,19 +206,7 @@ public:
      */
     PrimaryVariables dirichletAtPos(const GlobalPosition& globalPos) const
     {
-        const auto sol = analyticalSolution(globalPos);
-        PrimaryVariables values;
-
-        // use the values of the analytical solution
-        if constexpr (ParentType::isMomentumProblem())
-        {
-            values[Indices::velocityXIdx] = sol[0];
-            values[Indices::velocityYIdx] = sol[1];
-        }
-        else
-            values[0] = sol[2];
-
-        return values;
+        return analyticalSolution(globalPos);
     }
 
     /*!
@@ -249,15 +214,20 @@ public:
      *
      * \param globalPos The global position
      */
-    auto analyticalSolution(const GlobalPosition& globalPos) const
+    PrimaryVariables analyticalSolution(const GlobalPosition& globalPos) const
     {
         Scalar x = globalPos[0];
         Scalar y = globalPos[1];
-        std::array<Scalar, 3> values;
+        PrimaryVariables values;
 
-        values[0] = x*x * (1.0 - x)*(1.0 - x) * (2.0*y - 6.0*y*y + 4.0*y*y*y);        // vx
-        values[1] = -1.0*y*y * (1.0 - y)*(1.0 - y) * (2.0*x - 6.0*x*x + 4.0*x*x*x);   // vy
-        values[2] = x * (1.0-x);                                                      //p
+        if constexpr (ParentType::isMomentumProblem())
+        {
+            values[Indices::velocityXIdx] = x*x * (1.0 - x)*(1.0 - x) * (2.0*y - 6.0*y*y + 4.0*y*y*y);
+            values[Indices::velocityYIdx] = -1.0*y*y * (1.0 - y)*(1.0 - y) * (2.0*x - 6.0*x*x + 4.0*x*x*x);
+        }
+        else
+            values[Indices::pressureIdx] = x * (1.0-x);
+
         return values;
     }
 
@@ -280,7 +250,8 @@ public:
 
     Scalar pressureAtPos(const GlobalPosition& globalPos) const
     {
-        return analyticalSolution(globalPos)[2];
+        const Scalar x = globalPos[0];
+        return x * (1.0-x);
     }
 
     Scalar densityAtPos(const GlobalPosition& globalPos) const
@@ -304,12 +275,7 @@ public:
             auto fvGeometry = localView(this->gridGeometry());
             fvGeometry.bindElement(element);
             for (auto&& scv : scvs(fvGeometry))
-            {
-                const auto ccDofIdx = scv.dofIndex();
-                const auto ccDofPosition = scv.dofPosition();
-                const auto analyticalSolutionAtCc = analyticalSolution(ccDofPosition);
-                analyticalPressure[ccDofIdx] = analyticalSolutionAtCc[/*Indices::pressureIdx*/2];
-            }
+                analyticalPressure[scv.dofIndex()] = analyticalSolution(scv.dofPosition());
         }
 
         return analyticalPressure;
@@ -380,8 +346,6 @@ public:
 
 
 private:
-
-    bool printL2Error_;
     std::shared_ptr<CouplingManager> couplingManager_;
 };
 } // end namespace Dumux
