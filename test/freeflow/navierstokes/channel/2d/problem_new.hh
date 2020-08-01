@@ -307,18 +307,57 @@ public:
                 {
                     const auto transportingVelocity = [&]()
                     {
+                        const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
+                        const auto innerTransportingVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
+
                         if (scvf.boundary())
                         {
                             if (const auto bcTypes = this->boundaryTypes(element, scvf); bcTypes.isDirichlet(scvf.directionIndex()))
                                 return this->dirichlet(element, scvf)[scvf.directionIndex()];
+                            else
+                                return
+                                    innerTransportingVelocity; // fallback
                         }
-
-                        // fallback
-                        const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
-                        return elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
+                        else
+                        {
+                            static const bool useOldScheme = getParam<bool>("FreeFlow.UseOldTransportingVelocity", true); // TODO how to deprecate?
+                            if (useOldScheme)
+                                return innerTransportingVelocity;
+                            else
+                            {
+                                // average the transporting velocity by weighting with the scv volumes
+                                const auto insideVolume = fvGeometry.scv(orthogonalScvf.insideScvIdx()).volume();
+                                const auto outsideVolume = fvGeometry.scv(orthogonalScvf.outsideScvIdx()).volume();
+                                const auto outerTransportingVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
+                                return (insideVolume*innerTransportingVelocity + outsideVolume*outerTransportingVelocity) / (insideVolume + outsideVolume);
+                            }
+                        }
                     }();
 
-                    values[Indices::momentumYBalanceIdx] += elemVolVars[scvf.insideScvIdx()].velocity() * transportingVelocity * this->density(element, fvGeometry, scvf) * scvf.directionSign();
+                    if (fvGeometry.scv(scvf.insideScvIdx()).boundary())
+                    {
+                        const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
+                        const auto outerVelocity = elemVolVars[scvf.outsideScvIdx()].velocity();
+                        const auto rho = this->getInsideAndOutsideDensity(element, fvGeometry, scvf);
+
+                        const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
+
+                        const auto insideMomentum = innerVelocity * rho.first;
+                        const auto outsideMomentum = outerVelocity * rho.second;
+
+                        static const auto upwindWeight = getParamFromGroup<Scalar>(this->paramGroup(), "Flux.UpwindWeight");
+
+                        const auto transportedMomentum =  selfIsUpstream ? (upwindWeight * insideMomentum + (1.0 - upwindWeight) * outsideMomentum)
+                                                                         : (upwindWeight * outsideMomentum + (1.0 - upwindWeight) * insideMomentum);
+
+                        values[Indices::momentumYBalanceIdx] += transportingVelocity * transportedMomentum * scvf.directionSign();
+                    }
+                    else
+                    {
+                        const auto insideDensity = this->density(element, fvGeometry.scv(scvf.insideScvIdx()));
+                        const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
+                        values[Indices::momentumYBalanceIdx] += innerVelocity * transportingVelocity * insideDensity * scvf.directionSign();
+                    }
                 }
             }
 
