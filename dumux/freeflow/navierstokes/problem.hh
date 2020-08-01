@@ -251,6 +251,19 @@ public:
             return couplingManager_->density(element, scv, isPreviousTimeStep);
     }
 
+    const auto getInsideAndOutsideDensity(const Element& element,
+                                            const FVElementGeometry& fvGeometry,
+                                            const SubControlVolumeFace& scvf,
+                                            const bool isPreviousTimeStep = false) const
+    {
+        if constexpr (std::is_empty_v<CouplingManager>)
+        {
+            const auto rho = asImp_().densityAtPos(scvf.ipGlobal());
+            return std::make_pair(rho, rho);
+        }
+        return couplingManager_->getInsideAndOutsideDensity(element, fvGeometry, scvf, isPreviousTimeStep);
+    }
+
     /*!
      * \brief Returns the density at a given position.
      */
