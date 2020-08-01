@@ -251,10 +251,10 @@ public:
                                         : rho(momentumCouplingContext_[0].curElemVolVars);
     }
 
-    const auto getInsideAndOutsideDensity(const Element<freeFlowMomentumIdx>& element,
-                                          const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
-                                          const SubControlVolumeFace<freeFlowMomentumIdx>& scvf,
-                                          const bool considerPreviousTimeStep = false) const
+    auto getInsideAndOutsideDensity(const Element<freeFlowMomentumIdx>& element,
+                                    const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
+                                    const SubControlVolumeFace<freeFlowMomentumIdx>& scvf,
+                                    const bool considerPreviousTimeStep = false) const
     {
         assert(!(considerPreviousTimeStep && !isTransient_));
         bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
