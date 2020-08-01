@@ -413,8 +413,10 @@ public:
             const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
             const auto outerVelocity = elemVolVars[scvf.outsideScvIdx()].velocity();
 
-            const auto insideMomentum = innerVelocity * this->problem().density(this->element(), fvGeometry.scv(scvf.insideScvIdx()));
-            const auto outsideMomentum = outerVelocity * this->problem().density(this->element(), fvGeometry.scv(scvf.insideScvIdx())); // TODO this is still the wrong density
+            const auto rho = this->problem().getInsideAndOutsideDensity(this->element(), fvGeometry, scvf);
+
+            const auto insideMomentum = innerVelocity * rho.first;
+            const auto outsideMomentum = outerVelocity * rho.second;
 
             // TODO use higher order helper
             static const auto upwindWeight = getParamFromGroup<Scalar>(problem.paramGroup(), "Flux.UpwindWeight");
