@@ -251,6 +251,32 @@ public:
                                         : rho(momentumCouplingContext_[0].curElemVolVars);
     }
 
+    const auto getInsideAndOutsideDensity(const Element<freeFlowMomentumIdx>& element,
+                                          const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
+                                          const SubControlVolumeFace<freeFlowMomentumIdx>& scvf,
+                                          const bool considerPreviousTimeStep = false) const
+    {
+        assert(!(considerPreviousTimeStep && !isTransient_));
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
+        const auto& insideMomentumScv = fvGeometry.scv(scvf.insideScvIdx());
+        const auto& insideMassScv = momentumCouplingContext_[0].fvGeometry.scv(insideMomentumScv.elementIndex());
+
+        auto result = [&](const auto& elemVolVars)
+        {
+            if (scvf.boundary())
+                return std::make_pair(elemVolVars[insideMassScv].density(), elemVolVars[insideMassScv].density());
+            else
+            {
+                const auto& outsideMomentumScv = fvGeometry.scv(scvf.outsideScvIdx());
+                const auto& outsideMassScv = momentumCouplingContext_[0].fvGeometry.scv(outsideMomentumScv.elementIndex());
+                return std::make_pair(elemVolVars[insideMassScv].density(), elemVolVars[outsideMassScv].density());
+            }
+        };
+
+        return considerPreviousTimeStep ? result(momentumCouplingContext_[0].prevElemVolVars)
+                                        : result(momentumCouplingContext_[0].curElemVolVars);
+    }
+
     /*!
      * \brief Returns the density at a given sub control volume.
      */
