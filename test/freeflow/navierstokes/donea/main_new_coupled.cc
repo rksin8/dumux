@@ -212,7 +212,20 @@ int main(int argc, char** argv) try
     vtk.addCellData(faceData, "velcocityScalar");
     vtk.write("facedata", Dune::VTK::ascii);
 
-    // massProblem->printL2Error(x);
+    if (getParam<bool>("Problem.PrintL2Error"))
+    {
+        auto pressureL2error = calculateL2Error(*massProblem, x[massIdx]);
+        auto velocityL2error = calculateL2Error(*momentumProblem, x[momentumIdx]);
+
+        std::cout << std::setprecision(8) << "** L2 error (abs/rel) for "
+                        << std::setw(6) << massGridGeometry->numDofs() << " cc dofs and " << momentumGridGeometry->numDofs()
+                        << " face dofs (total: " << massGridGeometry->numDofs() + momentumGridGeometry->numDofs() << "): "
+                        << std::scientific
+                        << "L2(p) = " << pressureL2error.absolute[0] << " / " << pressureL2error.relative[0]
+                        << " , L2(vx) = " << velocityL2error.absolute[0] << " / " << velocityL2error.relative[0]
+                        << " , L2(vy) = " << velocityL2error.absolute[1] << " / " << velocityL2error.relative[1]
+                        << std::endl;
+    }
 
     timer.stop();
 
