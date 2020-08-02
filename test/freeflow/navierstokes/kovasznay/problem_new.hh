@@ -34,18 +34,11 @@
 #include <dumux/material/fluidsystems/1pliquid.hh>
 #include <dumux/material/components/constant.hh>
 
-#include <dumux/common/boundarytypes.hh>
 #include <dumux/freeflow/navierstokes/momentum/model.hh>
 #include <dumux/freeflow/navierstokes/mass/1p/model.hh>
 #include <dumux/freeflow/navierstokes/problem.hh>
 #include <dumux/discretization/fcstaggered.hh>
 #include <dumux/discretization/cctpfa.hh>
-#include "../l2error.hh"
-
-#include <dumux/multidomain/traits.hh>
-#include <dumux/multidomain/staggeredfreeflow/couplingmanager.hh>
-
-// #include "../l2error.hh"
 
 namespace Dumux {
 
@@ -127,40 +120,18 @@ class KovasznayTestProblem :  public NavierStokesProblem<TypeTag>
 public:
     KovasznayTestProblem(std::shared_ptr<const GridGeometry> gridGeometry, std::shared_ptr<CouplingManager> couplingManager)
     : ParentType(gridGeometry, couplingManager)
-    , couplingManager_(couplingManager)
     {
-        // printL2Error_ = getParam<bool>("Problem.PrintL2Error");
         // std::cout<< "upwindSchemeOrder is: " << GridGeometry::upwindStencilOrder() << "\n";
         kinematicViscosity_ = getParam<Scalar>("Component.LiquidKinematicViscosity", 1.0);
         Scalar reynoldsNumber = 1.0 / kinematicViscosity_;
         lambda_ = 0.5 * reynoldsNumber
                         - std::sqrt(reynoldsNumber * reynoldsNumber * 0.25 + 4.0 * M_PI * M_PI);
-
-        // createAnalyticalSolution_();
     }
 
    /*!
      * \name Problem parameters
      */
     // \{
-
-    // void printL2Error(const SolutionVector& curSol) const
-    // {
-    //     if(printL2Error_)
-    //     {
-    //         using L2Error = NavierStokesTestL2Error<Scalar, ModelTraits, PrimaryVariables>;
-    //         const auto l2error = L2Error::calculateL2Error(*this, curSol);
-    //         const int numCellCenterDofs = this->gridGeometry().numCellCenterDofs();
-    //         const int numFaceDofs = this->gridGeometry().numFaceDofs();
-    //         std::cout << std::setprecision(8) << "** L2 error (abs/rel) for "
-    //                 << std::setw(6) << numCellCenterDofs << " cc dofs and " << numFaceDofs << " face dofs (total: " << numCellCenterDofs + numFaceDofs << "): "
-    //                 << std::scientific
-    //                 << "L2(p) = " << l2error.first[Indices::pressureIdx] << " / " << l2error.second[Indices::pressureIdx]
-    //                 << " , L2(vx) = " << l2error.first[Indices::velocityXIdx] << " / " << l2error.second[Indices::velocityXIdx]
-    //                 << " , L2(vy) = " << l2error.first[Indices::velocityYIdx] << " / " << l2error.second[Indices::velocityYIdx]
-    //                 << std::endl;
-    //     }
-    // }
 
    /*!
      * \brief Returns the temperature within the domain in [K].
@@ -202,18 +173,7 @@ public:
      */
     PrimaryVariables dirichletAtPos(const GlobalPosition & globalPos) const
     {
-        PrimaryVariables values(0.0);
-        const auto sol = analyticalSolution(globalPos);
-        // use the values of the analytical solution
-        if constexpr (ParentType::isMomentumProblem())
-        {
-            values[Indices::velocityXIdx] = sol[0];
-            values[Indices::velocityYIdx] = sol[1];
-        }
-        else
-            values[0] = sol[2];
-
-        return values;
+        return analyticalSolution(globalPos);
     }
 
    /*!
@@ -221,15 +181,19 @@ public:
      *
      * \param globalPos The global position
      */
-    std::array<Scalar, 3> analyticalSolution(const GlobalPosition& globalPos) const
+    PrimaryVariables analyticalSolution(const GlobalPosition& globalPos) const
     {
         Scalar x = globalPos[0];
         Scalar y = globalPos[1];
+        PrimaryVariables values;
 
-        std::array<Scalar, 3> values;
-        values[2] = 0.5 * (1.0 - std::exp(2.0 * lambda_ * x));
-        values[0] = 1.0 - std::exp(lambda_ * x) * std::cos(2.0 * M_PI * y);
-        values[1] = 0.5 * lambda_ / M_PI * std::exp(lambda_ * x) * std::sin(2.0 * M_PI * y);
+        if constexpr (ParentType::isMomentumProblem())
+        {
+            values[Indices::velocityXIdx] = 1.0 - std::exp(lambda_ * x) * std::cos(2.0 * M_PI * y);
+            values[Indices::velocityYIdx] = 0.5 * lambda_ / M_PI * std::exp(lambda_ * x) * std::sin(2.0 * M_PI * y);
+        }
+        else
+            values[Indices::pressureIdx] = 0.5 * (1.0 - std::exp(2.0 * lambda_ * x));
 
         return values;
     }
@@ -251,48 +215,7 @@ public:
         return PrimaryVariables(0.0);
     }
 
-    /*!
-     * \brief Returns the analytical solution for the pressure
-     */
-    template<bool enable = !ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
-    const std::vector<Scalar> getAnalyticalPressureSolution() const
-    {
-        std::vector<Scalar> analyticalPressure(this->gridGeometry().gridView().size(0));
-        for (const auto& element : elements(this->gridGeometry().gridView()))
-        {
-            auto fvGeometry = localView(this->gridGeometry());
-            fvGeometry.bindElement(element);
-            for (auto&& scv : scvs(fvGeometry))
-            {
-                const auto ccDofIdx = scv.dofIndex();
-                const auto ccDofPosition = scv.dofPosition();
-                const auto analyticalSolutionAtCc = analyticalSolution(ccDofPosition);
-                analyticalPressure[ccDofIdx] = analyticalSolutionAtCc[/*Indices::pressureIdx*/2];
-            }
-        }
-
-        return analyticalPressure;
-    }
-
-    /*!
-     * \brief Returns the analytical solution for the velocity
-     */
-    template<bool enable = ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
-    const std::vector<VelocityVector> getAnalyticalVelocitySolution() const
-    {
-        std::vector<VelocityVector> analyticalVelocity(this->gridGeometry().gridView().size(0));
-        for (const auto& element : elements(this->gridGeometry().gridView()))
-        {
-            const auto& pos = element.geometry().center();
-            const auto eIdx = this->gridGeometry().elementMapper().index(element);
-            for(int dirIdx = 0; dirIdx < ModelTraits::dim(); ++dirIdx)
-                analyticalVelocity[eIdx][dirIdx] = analyticalSolution(pos)[Indices::velocity(dirIdx)];
-        }
-
-        return analyticalVelocity;
-    }
-
-        //! Enable internal Dirichlet constraints
+    //! Enable internal Dirichlet constraints
     static constexpr bool enableInternalDirichletConstraints()
     { return !ParentType::isMomentumProblem(); }
 
@@ -339,16 +262,12 @@ public:
      * \param scv The sub-control volume
      */
     PrimaryVariables internalDirichlet(const Element& element, const SubControlVolume& scv) const
-    { return PrimaryVariables(analyticalSolution(scv.center())[2]); }
+    { return PrimaryVariables(analyticalSolution(scv.center())[Indices::pressureIdx]); }
 
 private:
-
-
-    static constexpr Scalar eps_=1e-6;
-
+    static constexpr Scalar eps_ = 1e-6;
     Scalar kinematicViscosity_;
     Scalar lambda_;
-    std::shared_ptr<CouplingManager> couplingManager_;
 };
 } // end namespace Dumux
 

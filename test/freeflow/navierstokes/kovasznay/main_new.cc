@@ -56,6 +56,8 @@
 #include <dumux/io/vtkoutputmodule.hh>
 #include <dumux/freeflow/navierstokes/velocityoutput.hh>
 
+#include "../l2error.hh"
+#include "../analyticalsolution.hh"
 #include "problem_new.hh"
 
 namespace Dumux::Properties{
@@ -156,8 +158,8 @@ int main(int argc, char** argv) try
     VtkOutputModule vtkWriter(*massGridVariables, x[massIdx], massProblem->name());
     IOFields::initOutputModule(vtkWriter); // Add model specific output fields
     vtkWriter.addVelocityOutput(std::make_shared<NavierStokesVelocityOutput<MassGridVariables>>());
-    const auto exactPressure = massProblem->getAnalyticalPressureSolution();
-    const auto exactVelocity = momentumProblem->getAnalyticalVelocitySolution();
+    const auto exactPressure = getScalarAnalyticalSolution(*massProblem)[GetPropType<MassTypeTag, Properties::ModelTraits>::Indices::pressureIdx];
+    const auto exactVelocity = getVelocityAnalyticalSolution(*momentumProblem);
     vtkWriter.addField(exactPressure, "pressureExact");
     vtkWriter.addField(exactVelocity, "velocityExact");
 
@@ -173,13 +175,25 @@ int main(int argc, char** argv) try
     // linearize & solve
     Dune::Timer timer;
     nonLinearSolver.solve(x);
-    timer.stop();
 
     // write vtk output
     vtkWriter.write(1.0);
-    // problem->printL2Error(x);
+    timer.stop();
 
-    // timer.stop();
+    if (getParam<bool>("Problem.PrintL2Error"))
+    {
+        auto pressureL2error = calculateL2Error(*massProblem, x[massIdx]);
+        auto velocityL2error = calculateL2Error(*momentumProblem, x[momentumIdx]);
+
+        std::cout << std::setprecision(8) << "** L2 error (abs/rel) for "
+                        << std::setw(6) << massGridGeometry->numDofs() << " cc dofs and " << momentumGridGeometry->numDofs()
+                        << " face dofs (total: " << massGridGeometry->numDofs() + momentumGridGeometry->numDofs() << "): "
+                        << std::scientific
+                        << "L2(p) = " << pressureL2error.absolute[0] << " / " << pressureL2error.relative[0]
+                        << " , L2(vx) = " << velocityL2error.absolute[0] << " / " << velocityL2error.relative[0]
+                        << " , L2(vy) = " << velocityL2error.absolute[1] << " / " << velocityL2error.relative[1]
+                        << std::endl;
+    }
 
     const auto& comm = Dune::MPIHelper::getCollectiveCommunication();
     std::cout << "Simulation took " << timer.elapsed() << " seconds on "
