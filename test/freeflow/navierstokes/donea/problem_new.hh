@@ -33,17 +33,11 @@
 #include <dumux/material/fluidsystems/1pliquid.hh>
 #include <dumux/material/components/constant.hh>
 
-#include <dumux/common/boundarytypes.hh>
 #include <dumux/freeflow/navierstokes/momentum/model.hh>
 #include <dumux/freeflow/navierstokes/problem.hh>
 #include <dumux/freeflow/navierstokes/mass/1p/model.hh>
 #include <dumux/discretization/fcstaggered.hh>
 #include <dumux/discretization/cctpfa.hh>
-#include "../l2error.hh"
-
-#include <dumux/multidomain/traits.hh>
-#include <dumux/multidomain/staggeredfreeflow/couplingmanager.hh>
-
 
 namespace Dumux
 {
@@ -123,7 +117,6 @@ class DoneaTestProblemNew : public NavierStokesProblem<TypeTag>
 public:
     DoneaTestProblemNew(std::shared_ptr<const GridGeometry> gridGeometry, std::shared_ptr<CouplingManager> couplingManager)
     : ParentType(gridGeometry, couplingManager)
-    , couplingManager_(couplingManager)
     {}
 
     DoneaTestProblemNew(std::shared_ptr<const GridGeometry> gridGeometry)
@@ -262,43 +255,6 @@ public:
     Scalar effectiveViscosityAtPos(const GlobalPosition& globalPos) const
     { return 1; }
 
-
-   /*!
-     * \brief Returns the analytical solution for the pressure
-     */
-    template<bool enable = !ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
-    const std::vector<Scalar> getAnalyticalPressureSolution() const
-    {
-        std::vector<Scalar> analyticalPressure(this->gridGeometry().gridView().size(0));
-        for (const auto& element : elements(this->gridGeometry().gridView()))
-        {
-            auto fvGeometry = localView(this->gridGeometry());
-            fvGeometry.bindElement(element);
-            for (auto&& scv : scvs(fvGeometry))
-                analyticalPressure[scv.dofIndex()] = analyticalSolution(scv.dofPosition());
-        }
-
-        return analyticalPressure;
-    }
-
-   /*!
-     * \brief Returns the analytical solution for the velocity
-     */
-    template<bool enable = ParentType::isMomentumProblem(), std::enable_if_t<enable, int> = 0>
-    const std::vector<VelocityVector> getAnalyticalVelocitySolution() const
-    {
-        std::vector<VelocityVector> analyticalVelocity(this->gridGeometry().gridView().size(0));
-        for (const auto& element : elements(this->gridGeometry().gridView()))
-        {
-            const auto& pos = element.geometry().center();
-            const auto eIdx = this->gridGeometry().elementMapper().index(element);
-            for(int dirIdx = 0; dirIdx < ModelTraits::dim(); ++dirIdx)
-                analyticalVelocity[eIdx][dirIdx] = analyticalSolution(pos)[Indices::velocity(dirIdx)];
-        }
-
-        return analyticalVelocity;
-    }
-
     //! Enable internal Dirichlet constraints
     static constexpr bool enableInternalDirichletConstraints()
     { return !ParentType::isMomentumProblem(); }
@@ -342,11 +298,8 @@ public:
      * \param scv The sub-control volume
      */
     PrimaryVariables internalDirichlet(const Element& element, const SubControlVolume& scv) const
-    { return PrimaryVariables(analyticalSolution(scv.center())[2]); }
+    { return PrimaryVariables(analyticalSolution(scv.center())[Indices::pressureIdx]); }
 
-
-private:
-    std::shared_ptr<CouplingManager> couplingManager_;
 };
 } // end namespace Dumux
 

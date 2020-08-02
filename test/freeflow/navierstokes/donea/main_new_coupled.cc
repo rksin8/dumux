@@ -43,9 +43,7 @@
 #include <dumux/io/vtkfunction.hh>
 #include <dumux/linear/seqsolverbackend.hh>
 #include <dumux/nonlinear/newtonsolver.hh>
-#include <dumux/discretization/facecentered/staggered/fvgridgeometry.hh>
 
-#include <dumux/assembly/staggeredfvassembler.hh>
 
 #include <dumux/multidomain/fvassembler.hh>
 #include <dumux/multidomain/traits.hh>
@@ -56,7 +54,8 @@
 #include <dumux/io/vtkoutputmodule.hh>
 #include <dumux/freeflow/navierstokes/velocityoutput.hh>
 
-
+#include "../l2error.hh"
+#include "../analyticalsolution.hh"
 #include "problem_new.hh"
 
 namespace Dumux::Properties{
@@ -134,7 +133,6 @@ int main(int argc, char** argv) try
     x[momentumIdx].resize(momentumGridGeometry->numDofs());
     x[massIdx].resize(massGridGeometry->numDofs());
 
-
     // the grid variables
     using MomentumGridVariables = GetPropType<MomentumTypeTag, Properties::GridVariables>;
     auto momentumGridVariables = std::make_shared<MomentumGridVariables>(momentumProblem, momentumGridGeometry);
@@ -146,21 +144,19 @@ int main(int argc, char** argv) try
     massGridVariables->init(x[massIdx]);
     momentumGridVariables->init(x[momentumIdx]);
 
-
     using Assembler = MultiDomainFVAssembler<Traits, CouplingManager, DiffMethod::numeric>;
     auto assembler = std::make_shared<Assembler>(std::make_tuple(momentumProblem, massProblem),
                                                  std::make_tuple(momentumGridGeometry, massGridGeometry),
                                                  std::make_tuple(momentumGridVariables, massGridVariables),
                                                  couplingManager);
 
-
     // intialize the vtk output module
     using IOFields = GetPropType<MassTypeTag, Properties::IOFields>;
     VtkOutputModule vtkWriter(*massGridVariables, x[massIdx], massProblem->name());
     IOFields::initOutputModule(vtkWriter); // Add model specific output fields
     vtkWriter.addVelocityOutput(std::make_shared<NavierStokesVelocityOutput<MassGridVariables>>());
-    const auto exactPressure = massProblem->getAnalyticalPressureSolution();
-    const auto exactVelocity = momentumProblem->getAnalyticalVelocitySolution();
+    const auto exactPressure = getScalarAnalyticalSolution(*massProblem)[GetPropType<MassTypeTag, Properties::ModelTraits>::Indices::pressureIdx];
+    const auto exactVelocity = getVelocityAnalyticalSolution(*momentumProblem);
     vtkWriter.addField(exactPressure, "pressureExact");
     vtkWriter.addField(exactVelocity, "velocityExact");
 
@@ -214,8 +210,8 @@ int main(int argc, char** argv) try
 
     if (getParam<bool>("Problem.PrintL2Error"))
     {
-        auto pressureL2error = calculateL2Error(*massProblem, x[massIdx]);
-        auto velocityL2error = calculateL2Error(*momentumProblem, x[momentumIdx]);
+        const auto pressureL2error = calculateL2Error(*massProblem, x[massIdx]);
+        const auto velocityL2error = calculateL2Error(*momentumProblem, x[momentumIdx]);
 
         std::cout << std::setprecision(8) << "** L2 error (abs/rel) for "
                         << std::setw(6) << massGridGeometry->numDofs() << " cc dofs and " << momentumGridGeometry->numDofs()
