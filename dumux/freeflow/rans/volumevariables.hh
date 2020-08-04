@@ -93,13 +93,14 @@ public:
 
         // calculate characteristic properties of the turbulent flow
         elementIdx_ = problem.gridGeometry().elementMapper().index(element);
-        wallElementIdx_ = problem.wallElementIdx_[elementIdx_];
         wallDistance_ = problem.wallDistance_[elementIdx_];
         velocity_ = problem.velocity_[elementIdx_];
-        velocityMaximum_ = problem.velocityMaximum_[wallElementIdx_];
         velocityGradients_ = problem.velocityGradients_[elementIdx_];
+
         const auto flowNormalAxis = problem.flowNormalAxis_[elementIdx_];
         const auto wallNormalAxis = problem.wallNormalAxis_[elementIdx_];
+        wallElementIdx_ = problem.wallElementIdx_[elementIdx_];
+        velocityMaximum_ = problem.velocityMaximum_[wallElementIdx_];
         uStar_ = sqrt(problem.kinematicViscosity_[wallElementIdx_]
                       * abs(problem.velocityGradients_[wallElementIdx_][flowNormalAxis][wallNormalAxis]));
         uStar_ = max(uStar_, 1e-10); // zero values lead to numerical problems in some turbulence models
