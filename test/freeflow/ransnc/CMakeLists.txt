@@ -1,4 +1,5 @@
 add_input_file_links()
+dune_symlink_to_source_files(FILES solutions)
 
 # isothermal tests
 add_executable(test_ff_rans2c_kepsilon EXCLUDE_FROM_ALL main.cc)
@@ -157,3 +158,25 @@ dumux_add_test(NAME test_ff_rans2cni_zeroeq
                              --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_rans2cni_zeroeq params_nonisothermal.input
                              -Problem.Name test_ff_rans2cni_zeroeq")
 target_compile_definitions(test_ff_rans2cni_zeroeq PUBLIC "NONISOTHERMAL")
+
+#///////////////////////////
+#/// Load Solution tests ///
+#///////////////////////////
+
+dumux_add_test(NAME test_ff_rans2cni_komega_loadsolution
+              SOURCES main_loadsolution.cc
+              COMPILE_DEFINITIONS TYPETAG=FlatPlateNCNIKOmega BASETYPETAG=FlatPlateNCKOmega
+              LABELS freeflow rans loadsolution
+              CMAKE_GUARD HAVE_UMFPACK
+              COMMAND ${CMAKE_SOURCE_DIR}/bin/testing/runtest.py
+              CMD_ARGS       --script fuzzy
+                             --files ${CMAKE_SOURCE_DIR}/test/references/test_ff_rans2cni_komega_loadsolution-reference.vtu
+                                     ${CMAKE_CURRENT_BINARY_DIR}/test_ff_rans2cni_komega_loadsolution-00008.vtu
+                             --command "${CMAKE_CURRENT_BINARY_DIR}/test_ff_rans2cni_komega_loadsolution params_nonisothermal.input
+                                       -LoadSolution.RansCCFile ./solutions/komeganc_ccsolution.vtu
+                                       -LoadSolution.RansFaceFile ./solutions/komeganc_facesolution.vtp
+                                       -Problem.Name test_ff_rans2cni_komega_loadsolution
+                                       -TimeLoop.DtInitial 5.0
+                                       -TimeLoop.TEnd 200.0
+                                       ")
+target_compile_definitions(test_ff_rans2cni_komega_loadsolution PUBLIC "NONISOTHERMAL")
