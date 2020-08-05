@@ -76,6 +76,7 @@ class RANSProblemBase : public NavierStokesProblem<TypeTag>
     using GlobalPosition = typename SubControlVolumeFace::GlobalPosition;
 
     static constexpr auto dim = GridView::dimension;
+    static constexpr bool hasFlatWallGeometry = getPropValue<TypeTag, Properties::HasFlatWallGeometry>();
     using DimVector = GlobalPosition;
     using DimMatrix = Dune::FieldMatrix<Scalar, dim, dim>;
 
