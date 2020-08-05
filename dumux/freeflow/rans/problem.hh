@@ -154,14 +154,9 @@ public:
         {
             unsigned int elementIdx = this->gridGeometry().elementMapper().index(element);
             cellCenter_[elementIdx] = element.geometry().center();
+
             for (unsigned int i = 0; i < wallPositions.size(); ++i)
             {
-                int searchAxis = getParamFromGroup<int>(this->paramGroup(), "RANS.WallNormalAxis", -1);
-
-                // search along wall normal axis of the intersection
-                if (searchAxis < 0 || searchAxis >= dim)
-                    searchAxis = wallNormalAxisTemp[i];
-
                 GlobalPosition cellToWallVector = (cellCenter_[elementIdx] - wallPositions[i]);
                 Scalar distanceToWallFace = cellToWallVector.two_norm();
 
@@ -169,7 +164,16 @@ public:
                 {
                     wallDistance_[elementIdx] = distanceToWallFace;
                     wallElementIdx_[elementIdx] = wallElements[i];
-                    wallNormalAxis_[elementIdx] = searchAxis;
+                    if constexpr (hasFlatWallGeometry)
+                    {
+                        int searchAxis = getParamFromGroup<int>(this->paramGroup(), "RANS.WallNormalAxis", -1);
+
+                        // search along wall normal axis of the intersection
+                        if (searchAxis < 0 || searchAxis >= dim)
+                            searchAxis = wallNormalAxisTemp[i];
+
+                        wallNormalAxis_[elementIdx] = searchAxis;
+                    }
                     sandGrainRoughness_[elementIdx] = asImp_().sandGrainRoughnessAtPos(wallPositions[i]);
                 }
             }
