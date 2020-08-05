@@ -101,6 +101,7 @@ private:
  */
 template <class SolutionVector, class PvNameFunc, class GridGeometry>
 auto loadSolutionFromVtkFile(SolutionVector& sol,
+                             size_t loadedSolutionSize,
                              const std::string fileName,
                              PvNameFunc&& pvNameFunc,
                              const GridGeometry& gridGeometry,
@@ -112,7 +113,7 @@ auto loadSolutionFromVtkFile(SolutionVector& sol,
     using Scalar = typename PrimaryVariables::field_type;
     constexpr auto dim = GridGeometry::GridView::dimension;
 
-    for (size_t pvIdx = 0; pvIdx < PrimaryVariables::dimension; ++pvIdx)
+    for (size_t pvIdx = 0; pvIdx < loadedSolutionSize; ++pvIdx)
     {
         const auto pvName = pvNameFunc(pvIdx, 0);
         auto vec = vtu.readData<std::vector<Scalar>>(pvName, dataType);
@@ -277,6 +278,7 @@ auto createPVNameFunction(const std::string& paramGroup = "")
  */
 template <class SolutionVector, class PvNameFunc, class GridGeometry>
 void loadSolution(SolutionVector& sol,
+                  size_t loadedSolutionSize,
                   const std::string& fileName,
                   PvNameFunc&& pvNameFunc,
                   const GridGeometry& gridGeometry)
@@ -290,14 +292,14 @@ void loadSolution(SolutionVector& sol,
         if (GridGeometry::discMethod == DiscretizationMethod::staggered && extension == "vtp")
             dataType = VTKReader::DataType::pointData;
 
-        loadSolutionFromVtkFile(sol, fileName, pvNameFunc, gridGeometry, dataType);
+        loadSolutionFromVtkFile(sol, loadedSolutionSize, fileName, pvNameFunc, gridGeometry, dataType);
     }
     else if (extension == "pvtu" || extension == "pvtp")
     {
         if (GridGeometry::discMethod == DiscretizationMethod::staggered)
             DUNE_THROW(Dune::NotImplemented, "reading staggered solution from a parallel vtk file");
 
-        loadSolutionFromVtkFile(sol, fileName, pvNameFunc, gridGeometry, dataType);
+        loadSolutionFromVtkFile(sol, loadedSolutionSize, fileName, pvNameFunc, gridGeometry, dataType);
     }
     else
         DUNE_THROW(Dune::NotImplemented, "loadSolution for file with extension " << extension);
