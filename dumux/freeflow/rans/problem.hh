@@ -137,7 +137,8 @@ public:
                 {
                     wallElements.push_back(this->gridGeometry().elementMapper().index(element));
                     wallPositions.push_back(scvf.center());
-                    wallNormalAxisTemp.push_back(scvf.directionIndex());
+                    if (!hasParamInGroup(this->paramGroup(), "RANS.WallNormalAxis"))
+                        wallNormalAxisTemp.push_back(scvf.directionIndex());
                 }
             }
         }
