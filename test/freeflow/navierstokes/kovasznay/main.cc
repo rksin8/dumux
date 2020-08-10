@@ -90,7 +90,7 @@ int main(int argc, char** argv) try
         else if (globalPos[1] > (lowerLeft[1] + 1. - eps))
             return true;
         else if (inForm)
-            return isBelowCurve ? false : true;
+            return !isBelowCurve;
         else
             return true;
     };
