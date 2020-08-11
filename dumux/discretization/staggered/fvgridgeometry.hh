@@ -327,14 +327,6 @@ public:
                 // inner sub control volume faces
                 if (intersection.neighbor())
                 {
-                    SubControlVolumeFace tmpScvf(intersection,
-                                        intersection.geometry(),
-                                        scvfIdx,
-                                        std::vector<GridIndexType>({eIdx, this->gridView().size(0) + numBoundaryScvf_}),
-                                        geometryHelper
-                                        );
-                    boundaryScvfs_[this->gridView().indexSet().subIndex(element, localFaceIndex, 1)] = tmpScvf;
-
                     auto nIdx = this->elementMapper().index(intersection.outside());
                     scvfs_.emplace_back(intersection,
                                         intersection.geometry(),
@@ -343,15 +335,18 @@ public:
                                         geometryHelper);
                     localToGlobalScvfIndices_[eIdx][localFaceIndex] = scvfIdx;
                     scvfsIndexSet.push_back(scvfIdx++);
-
-                    boundaryScvfsIndexSet_.push_back(this->gridView().indexSet().subIndex(element, localFaceIndex, 1));
-                    bool eIdxAlreadyInVector = (find(boundaryScvsIndexSet_.begin(), boundaryScvsIndexSet_.end(), eIdx) != boundaryScvsIndexSet_.end());
-                    if(eIdxAlreadyInVector == false)
-                        boundaryScvsIndexSet_.push_back(eIdx);
                 }
                 // boundary sub control volume faces
                 else if (intersection.boundary())
                 {
+                    SubControlVolumeFace tmpScvf(intersection,
+                                        intersection.geometry(),
+                                        scvfIdx,
+                                        std::vector<GridIndexType>({eIdx, this->gridView().size(0) + numBoundaryScvf_}),
+                                        geometryHelper
+                                        );
+                    boundaryScvfs_[this->gridView().indexSet().subIndex(element, localFaceIndex, 1)] = tmpScvf;
+
                     scvfs_.emplace_back(intersection,
                                         intersection.geometry(),
                                         scvfIdx,
@@ -361,6 +356,11 @@ public:
                     scvfsIndexSet.push_back(scvfIdx++);
 
                     hasBoundaryScvf_[eIdx] = true;
+
+                    boundaryScvfsIndexSet_.push_back(this->gridView().indexSet().subIndex(element, localFaceIndex, 1));
+                    bool eIdxAlreadyInVector = (find(boundaryScvsIndexSet_.begin(), boundaryScvsIndexSet_.end(), eIdx) != boundaryScvsIndexSet_.end());
+                    if(eIdxAlreadyInVector == false)
+                        boundaryScvsIndexSet_.push_back(eIdx);
                 }
             }
 
