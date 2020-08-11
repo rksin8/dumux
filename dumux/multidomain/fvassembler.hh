@@ -356,7 +356,7 @@ public:
     //TODO: make it std::vector<IndexType>
     std::vector<unsigned int> reductionIndexSet(Dune::index_constant<i> domainI) const
     {
-        if (i == 0)
+        if (i == 1)
         {
             return problem(domainI).fixedPressureScvsIndexSet();
         }
