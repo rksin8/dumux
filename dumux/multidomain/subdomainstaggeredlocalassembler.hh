@@ -657,7 +657,7 @@ public:
         const auto& element = this->element();
         const auto& fvGeometry = this->fvGeometry();
         const auto& gridGeometry = this->problem().gridGeometry();
-        const auto& curSol = this->curSol()[domainJ];
+//         const auto& curSol = this->curSol()[domainJ];
         // build derivatives with for cell center dofs w.r.t. cell center dofs
         const auto cellCenterGlobalI = gridGeometry.elementMapper().index(element);
 
