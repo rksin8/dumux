@@ -330,7 +330,7 @@ public:
                     SubControlVolumeFace tmpScvf(intersection,
                                         intersection.geometry(),
                                         scvfIdx,
-                                        std::vector<IndexType>({eIdx, this->gridView().size(0) + numBoundaryScvf_}),
+                                        std::vector<GridIndexType>({eIdx, this->gridView().size(0) + numBoundaryScvf_}),
                                         geometryHelper
                                         );
                     boundaryScvfs_[this->gridView().indexSet().subIndex(element, localFaceIndex, 1)] = tmpScvf;
@@ -437,19 +437,19 @@ public:
 
     //! Get a boundary sub control volume face with dof index
     // At the boundary, the dofIdx is clearly connected with a scvf. In the inner of the domain, the dofIdx belongs to two different scvfs. ScvfIdx is not dofIdx, scvfIdx is different depending on what element the scvf is associated with.
-    const SubControlVolumeFace& boundaryScvf(IndexType scvfDofIdx) const
+    const SubControlVolumeFace& boundaryScvf(GridIndexType scvfDofIdx) const
     {
         return boundaryScvfs_[scvfDofIdx];
     }
 
     //! Get a vector of all dofIndices of the boundary scvfs
-    const std::vector<IndexType>& boundaryScvfsIndexSet() const
+    const std::vector<GridIndexType>& boundaryScvfsIndexSet() const
     {
         return boundaryScvfsIndexSet_;
     }
 
     //! Get a vector of all dofIndices of the boundary scvs
-    const std::vector<IndexType>& boundaryScvsIndexSet() const
+    const std::vector<GridIndexType>& boundaryScvsIndexSet() const
     {
         return boundaryScvsIndexSet_;
     }
@@ -465,8 +465,8 @@ private:
     std::vector<SubControlVolumeFace> boundaryScvfs_;
     std::vector<std::vector<GridIndexType>> scvfIndicesOfScv_;
     std::vector<std::vector<GridIndexType>> localToGlobalScvfIndices_;
-    std::vector<IndexType> boundaryScvfsIndexSet_;
-    std::vector<IndexType> boundaryScvsIndexSet_;
+    std::vector<GridIndexType> boundaryScvfsIndexSet_;
+    std::vector<GridIndexType> boundaryScvsIndexSet_;
     GridIndexType numBoundaryScvf_;
     std::vector<bool> hasBoundaryScvf_;
 };

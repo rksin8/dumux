@@ -62,9 +62,6 @@ class MultiDomainFVAssembler
     template<std::size_t id>
     using SubDomainTypeTag = typename MDTraits::template SubDomain<id>::TypeTag;
 
-    template<std::size_t id>
-    using IndexType = typename FVGridGeometry<id>::GridView::IndexSet::IndexType;
-
 public:
     using Traits = MDTraits;
 
@@ -79,6 +76,9 @@ public:
 
     template<std::size_t id>
     using GridGeometry = typename MDTraits::template SubDomain<id>::GridGeometry;
+
+    template<std::size_t id>
+    using IndexType = typename GridGeometry<id>::GridView::IndexSet::IndexType;
 
     template<std::size_t id>
     using Problem = typename MDTraits::template SubDomain<id>::Problem;
@@ -495,11 +495,6 @@ public:
     LocalResidual<i> localResidual(Dune::index_constant<i> domainId) const
     { return LocalResidual<i>(std::get<domainId>(problemTuple_).get(), timeLoop_.get()); }
 
-protected:
-    //! the coupling manager coupling the sub domains
-    std::shared_ptr<CouplingManager> couplingManager_;
-
-private:
     /*!
     * \tparam indices A set of indices that the to-be-deleted elements have in the vector.
     */
@@ -543,6 +538,12 @@ private:
 
         vector = tmpVector;
     }
+
+protected:
+    //! the coupling manager coupling the sub domains
+    std::shared_ptr<CouplingManager> couplingManager_;
+
+private:
 
     // reset the residual vector to 0.0
     void resetRHS_()
@@ -642,8 +643,8 @@ private:
                                                     << " Did you forget to set the timeLoop to make this problem instationary?");
     }
 
-    template<std::size_t i, class coefficentMatrixRow, class SubRes>
-    void assembleCoefficientMatrixAndRHS_(Dune::index_constant<i> domainId, coefficentMatrixRow& coefficentMatrixRow, SubRes& RHS,
+    template<std::size_t i, class CoefficentMatrixRow, class SubRes>
+    void assembleCoefficientMatrixAndRHS_(Dune::index_constant<i> domainId, CoefficentMatrixRow& coefficentMatrixRow, SubRes& RHS,
                                       const SolutionVector& curSol)
     {
         assemble_(domainId, [&](const auto& element)

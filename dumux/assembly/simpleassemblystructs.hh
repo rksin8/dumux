@@ -32,17 +32,17 @@ namespace Dumux {
 * \brief
 */
 template<class CellCenterPrimaryVariables, class TypeTag>
-struct SimpleMassBalanceSummands
+struct MySimpleMassBalanceSummands
 {
-    using GridView = typename GET_PROP_TYPE(TypeTag, GridView);
+    using GridView = typename GetPropType<TypeTag, Properties::GridGeometry>::GridView;
     using Element = typename GridView::template Codim<0>::Entity;
-    using FVElementGeometry = typename GET_PROP_TYPE(TypeTag, FVGridGeometry)::LocalView;
+    using FVElementGeometry = typename GetPropType<TypeTag, Properties::GridGeometry>::LocalView;
 
     CellCenterPrimaryVariables RHS;
     std::vector<CellCenterPrimaryVariables> coefficients;
 
     //! Constructor
-    SimpleMassBalanceSummands(const Element& element, const FVElementGeometry& fvGeometry){
+    MySimpleMassBalanceSummands(const Element& element, const FVElementGeometry& fvGeometry){
         this -> resize_(element, fvGeometry);
     }
 
@@ -68,9 +68,9 @@ private:
 * \brief
 */
 template<class FacePrimaryVariables, class TypeTag>
-struct SimpleMomentumBalanceSummands
+struct MySimpleMomentumBalanceSummands
 {
-    using FVElementGeometry = typename GET_PROP_TYPE(TypeTag, FVGridGeometry)::LocalView;
+    using FVElementGeometry = typename GetPropType<TypeTag, Properties::GridGeometry>::LocalView;
     using SubControlVolumeFace = typename FVElementGeometry::SubControlVolumeFace;
 
     FacePrimaryVariables RHS;
@@ -82,7 +82,7 @@ struct SimpleMomentumBalanceSummands
     std::vector<FacePrimaryVariables> outerNormalCoefficients;
 
     //! Constructor
-    SimpleMomentumBalanceSummands(const SubControlVolumeFace& scvf){
+    MySimpleMomentumBalanceSummands(const SubControlVolumeFace& scvf){
         this -> resize_(scvf);
     }
 

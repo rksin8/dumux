@@ -67,7 +67,6 @@ template<class TypeTag, class MyTypeTag>
 struct JacobianMatrix { using type = UndefinedProperty; };         //!< Type of the global jacobian matrix
 template<class TypeTag, class MyTypeTag>
 struct SolutionVector { using type = UndefinedProperty; };         //!< Vector containing all primary variable vector of the grid
-
 template<class TypeTag, class MyTypeTag>
 struct [[deprecated("BoundaryTypes will be removed after 3.3. Deduce boundary types from Problem.")]] BoundaryTypes { using type = UndefinedProperty; };          //!< Stores the boundary types of a single degree of freedom
 
@@ -235,12 +234,6 @@ template<class TypeTag, class MyTypeTag>
 struct EnableGridFaceVariablesCache { using type = UndefinedProperty; };        //!< Switch on/off caching of face variables
 template<class TypeTag, class MyTypeTag>
 struct UpwindSchemeOrder { using type = UndefinedProperty; };                   //!< Specifies the order of the upwinding scheme (1 == first order, 2 == second order(tvd methods))
-template<class TypeTag, class MyTypeTag>
-struct SimpleMassBalanceSummands { using type = UndefinedProperty; };
-template<class TypeTag, class MyTypeTag>
-struct SimpleMomentumBalanceSummands { using type = UndefinedProperty; };
-template<class TypeTag, class MyTypeTag>
-struct SimpleMomentumBalanceSummandsVector { using type = UndefinedProperty; };
 
 /////////////////////////////////////////////////////////////
 // Properties used by the mpnc model

@@ -165,7 +165,7 @@ public:
      *                   scvf
      * \endverbatim
      */
-    void computeMassFlux(const Problem& problem,
+    CellCenterPrimaryVariables computeMassFlux(const Problem& problem,
                                                const Element& element,
                                                const FVElementGeometry& fvGeometry,
                                                const ElementVolumeVariables& elemVolVars,
@@ -225,6 +225,10 @@ public:
                                                     const GridFluxVariablesCache& gridFluxVarsCache,
                                                     SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
     {
+        // The volume variables within the current element. We only require those (and none of neighboring elements)
+        // because the fluxes are calculated over the staggered face at the center of the element.
+        const auto& insideVolVars = elemVolVars[scvf.insideScvIdx()];
+
         // Account for the staggered face's area. For rectangular elements, this equals the area of the scvf
         // our velocity dof of interest lives on but with adjusted centroid
         const auto& scv = fvGeometry.scv(scvf.insideScvIdx());
@@ -245,20 +249,17 @@ public:
             StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
             Scalar factor =  transportingVelocity * -1.0 * scvf.directionSign() * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor();
 
-            upwindHelper.computeUpwindFrontalMomentum(selfIsUpstream, simpleMomentumBalanceSummands, factor);
+            upwindHelper.computeUpwindFrontalMomentum(problem, element, scvf, fvGeometry, selfIsUpstream, simpleMomentumBalanceSummands, factor);
         }
-
-        // The volume variables within the current element. We only require those (and none of neighboring elements)
-        // because the fluxes are calculated over the staggered face at the center of the element.
-        const auto& insideVolVars = elemVolVars[scvf.insideScvIdx()];
 
         // Diffusive flux.
         static const bool enableUnsymmetrizedVelocityGradient
             = getParamFromGroup<bool>(problem.paramGroup(), "FreeFlow.EnableUnsymmetrizedVelocityGradient", false);
         Scalar factor = enableUnsymmetrizedVelocityGradient ? 1.0 : 2.0;
-        factor *= (scvf.directionSign() * insideVolVars.effectiveViscosity() * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor() * scvf.directionSign()/ scvf.selfToOppositeDistance()));
+        factor *= (scvf.directionSign() * insideVolVars.effectiveViscosity() * Extrusion::area(frontalFace) * insideVolVars.extrusionFactor() * scvf.directionSign()/ scvf.selfToOppositeDistance());
 
-        VelocityGradients::velocityGradII(problem, scvf, faceVars, simpleMomentumBalanceSummands, factor);
+        VelocityGradients velocityGrads;
+        velocityGrads.velocityGradII(problem, element, scvf, fvGeometry, faceVars, simpleMomentumBalanceSummands, factor);
 
         // The pressure term.
         // Account for the orientation of the staggered face's normal outer normal vector
@@ -563,9 +564,9 @@ private:
         const bool selfIsUpstream = lateralFace.directionSign() == sign(transportingVelocity);
         StaggeredUpwindHelper<TypeTag, upwindSchemeOrder> upwindHelper(element, fvGeometry, scvf, elemFaceVars, elemVolVars, gridFluxVarsCache.staggeredUpwindMethods());
         FaceLateralSubControlVolumeFace lateralScvf(lateralStaggeredSCVFCenter_(lateralFace, scvf, localSubFaceIdx), 0.5*lateralFace.area());
-        Scalar factor = transportingVelocity * lateralFace.directionSign() * Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace)
+        Scalar factor = transportingVelocity * lateralFace.directionSign() * Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace);
 
-        return upwindHelper.computeUpwindLateralMomentum(selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, simpleMomentumBalanceSummands, factor);
+        return upwindHelper.computeUpwindLateralMomentum(problem, element, scvf, fvGeometry, selfIsUpstream, lateralFace, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, simpleMomentumBalanceSummands, factor);
     }
 
     /*!
@@ -621,7 +622,7 @@ private:
                              ? insideVolVars.effectiveViscosity()
                              : (insideVolVars.effectiveViscosity() + outsideVolVars.effectiveViscosity()) * 0.5;
 
-        Scalar factor = muAvg * lateralFace.directionSign()* Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace)
+        Scalar factor = muAvg * lateralFace.directionSign()* Extrusion::area(lateralScvf) * extrusionFactor_(elemVolVars, lateralFace);
 
         // Consider the shear stress caused by the gradient of the velocities normal to our face of interest.
         if (!enableUnsymmetrizedVelocityGradient)
@@ -630,7 +631,8 @@ private:
                 currentScvfBoundaryTypes->isDirichlet(Indices::velocity(lateralFace.directionIndex())) ||
                 currentScvfBoundaryTypes->isBeaversJoseph(Indices::velocity(lateralFace.directionIndex())))
             {
-                VelocityGradients::velocityGradJI(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx, simpleMomentumBalanceSummands, factor);
+                VelocityGradients velocityGrads;
+                velocityGrads.velocityGradJI(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx, simpleMomentumBalanceSummands, factor);
             }
         }
 
@@ -639,7 +641,8 @@ private:
         // so we can skip the computation.
         if (!lateralFace.boundary() || !lateralFaceBoundaryTypes->isDirichlet(Indices::pressureIdx))
         {
-            VelocityGradients::velocityGradIJ(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx, simpleMomentumBalanceSummands, factor);
+            VelocityGradients velocityGrads;
+            velocityGrads.velocityGradIJ(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx, simpleMomentumBalanceSummands, factor);
         }
     }
 

@@ -70,13 +70,8 @@ public:
     using GridVariables = GetPropType<TypeTag, Properties::GridVariables>;
     using CouplingManager = typename ParentType::CouplingManager;
 
-    using CellCenterSolutionVector = typename GET_PROP_TYPE(TypeTag, CellCenterSolutionVector);
-    using FaceSolutionVector = typename GET_PROP_TYPE(TypeTag, FaceSolutionVector);
-
-    using CCToCCMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockCCToCC;
-    using CCToFaceMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockCCToFace;
-    using FaceToCCMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockFaceToCC;
-    using FaceToFaceMatrixBlock = typename GET_PROP(TypeTag, JacobianMatrix)::MatrixBlockFaceToFace;
+    using CellCenterSolutionVector = GetPropType<TypeTag, Properties::CellCenterSolutionVector>;
+    using FaceSolutionVector = GetPropType<TypeTag, Properties::FaceSolutionVector>;
 
     //! The constructor for stationary problems
     StaggeredFVAssembler(std::shared_ptr<const Problem> problem,

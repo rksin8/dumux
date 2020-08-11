@@ -116,8 +116,12 @@ public:
      *        Then the corresponding set of momenta are collected and the prescribed
      *        upwinding method is used to calculate the momentum.
      */
-    void computeUpwindFrontalMomentum(const bool selfIsUpstream,
-                                      SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands
+    void computeUpwindFrontalMomentum(const Problem& problem,
+                                      const Element& element,
+                                      const SubControlVolumeFace& scvf,
+                                      const FVElementGeometry& fvGeometry,
+                                      const bool selfIsUpstream,
+                                      SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
                                       Scalar factor) const
     {
         const auto density = elemVolVars_[scvf_.insideScvIdx()].density();
@@ -129,7 +133,7 @@ public:
         }
 
         // otherwise apply first order upwind scheme
-        getFrontalFirstOrderUpwindMomenta_(density, selfIsUpstream, factor);
+        getFrontalFirstOrderUpwindMomenta_(problem, element, scvf, fvGeometry, simpleMomentumBalanceSummands, density, selfIsUpstream, factor);
     }
 
     /*!
@@ -141,7 +145,11 @@ public:
      *        Then the corresponding set of momenta are collected and the prescribed
      *        upwinding method is used to calculate the momentum.
      */
-    void computeUpwindLateralMomentum(const bool selfIsUpstream,
+    void computeUpwindLateralMomentum(const Problem& problem,
+                                      const Element& element,
+                                      const SubControlVolumeFace& scvf,
+                                      const FVElementGeometry& fvGeometry,
+                                      const bool selfIsUpstream,
                                                       const SubControlVolumeFace& lateralFace,
                                                       const int localSubFaceIdx,
                                                       const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
@@ -162,7 +170,7 @@ public:
         }
 
         // otherwise apply first order upwind scheme
-        getLateralFirstOrderUpwindMomenta_(insideDensity, outsideDensity, selfIsUpstream, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, factor);
+        getLateralFirstOrderUpwindMomenta_(problem, element, scvf, lateralFace, fvGeometry, insideDensity, outsideDensity, selfIsUpstream, localSubFaceIdx, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, factor, simpleMomentumBalanceSummands);
     }
 
 private:
@@ -197,12 +205,19 @@ private:
     /*!
      * \brief Returns an array of the two momenta needed for first order upwinding method
      */
-    void getFrontalFirstOrderUpwindMomenta_(const Scalar density, bool selfIsUpstream, Scalar factor) const
+    void getFrontalFirstOrderUpwindMomenta_(const Problem& problem,
+                                            const Element& element,
+                                            const SubControlVolumeFace& scvf,
+                                            const FVElementGeometry& fvGeometry,
+                                            SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
+                                            const Scalar density,
+                                            bool selfIsUpstream,
+                                            Scalar factor) const
     {
         //upwind factors
         Scalar selfUpwindFactor;
         Scalar oppositeUpwindFactor;
-        static const Scalar getLateralFirstOrderUpwindMomentaUpwindWeight = getParamFromGroup<Scalar>(paramGroup, "Flux.UpwindWeight");//thought static might require unique name
+        static const Scalar getLateralFirstOrderUpwindMomentaUpwindWeight = getParamFromGroup<Scalar>("", "Flux.UpwindWeight");//thought static might require unique name
         Scalar upwindWeight = getLateralFirstOrderUpwindMomentaUpwindWeight;//just for shorter name
         if (selfIsUpstream)
         {
@@ -342,13 +357,19 @@ private:
     /*!
      * \brief Returns an array of momenta needed for basic upwinding methods.
      */
-    void getLateralFirstOrderUpwindMomenta_(const Scalar insideDensity,
+    void getLateralFirstOrderUpwindMomenta_(const Problem& problem,
+                                      const Element& element,
+                                      const SubControlVolumeFace& scvf,
+                                      const SubControlVolumeFace& lateralFace,
+                                      const FVElementGeometry& fvGeometry,
+                                      const Scalar insideDensity,
                                                              const Scalar outsideDensity,
                                                              const bool selfIsUpstream,
                                                              const int localSubFaceIdx,
                                                              const std::optional<BoundaryTypes>& currentScvfBoundaryTypes,
                                                              const std::optional<BoundaryTypes>& lateralFaceBoundaryTypes,
-                                            Scalar factor) const
+                                            Scalar factor,
+                                      SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         // If the lateral face lies on a boundary, we assume that the parallel velocity on the boundary is actually known,
         // thus we always use this value for the computation of the transported momentum.
@@ -363,7 +384,7 @@ private:
         //upwind factors
         Scalar selfUpwindFactor;
         Scalar parallelUpwindFactor;
-        static const Scalar getLateralFirstOrderUpwindMomentaUpwindWeight = getParamFromGroup<Scalar>(paramGroup, "Flux.UpwindWeight");//thought static might require unique name
+        static const Scalar getLateralFirstOrderUpwindMomentaUpwindWeight = getParamFromGroup<Scalar>("", "Flux.UpwindWeight");//thought static might require unique name
         Scalar upwindWeight = getLateralFirstOrderUpwindMomentaUpwindWeight;//just for shorter name
         if (selfIsUpstream)
         {
@@ -387,7 +408,7 @@ private:
         }
 
         //parallel
-        const auto eIdx = normalFace.outsideScvIdx();
+        const auto eIdx = lateralFace.outsideScvIdx();
         const auto parallelFace = fvGeometry.scvf(eIdx, scvf.localFaceIdx());
         if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))) {
             simpleMomentumBalanceSummands.RHS -= parallelUpwindFactor*faceVars_.velocityParallel(localSubFaceIdx, 0)*outsideDensity* factor;

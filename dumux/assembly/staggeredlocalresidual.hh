@@ -99,8 +99,6 @@ public:
         // evaluate the flux term
         for (auto&& scvf : scvfs(fvGeometry))
             asImp().evalFluxForCellCenter(simpleMassBalanceSummands, this->problem(), element, fvGeometry, elemVolVars, elemFaceVars, bcTypes, elemFluxVarsCache, scvf);
-
-        return residual;
     }
 
     //! Evaluate the flux terms for a cell center residual
@@ -132,7 +130,7 @@ public:
             const auto curExtrusionFactor = curElemVolVars[scv].extrusionFactor();
 
             // subtract the source term from the local rate
-            auto source = asImp_().computeSourceForCellCenter(problem, element, fvGeometry, curElemVolVars, curElemFaceVars, scv, simpleMassBalanceSummands);
+            auto source = asImp_().computeSourceForCellCenter(problem, element, fvGeometry, curElemVolVars, curElemFaceVars, scv);
             source *= Extrusion::volume(scv)*curExtrusionFactor;
             simpleMassBalanceSummands.RHS += source;
     }
@@ -170,8 +168,8 @@ public:
 
         // We might need a more explicit way for
         // doing the time discretization...
-        auto prevCCStorage = asImp_().computeStorageForCellCenter(problem, scv, prevVolVars, simpleMassBalanceSummands);
-        auto curCCStorage = asImp_().computeStorageForCellCenter(problem, scv, curVolVars, simpleMassBalanceSummands);
+        auto prevCCStorage = asImp_().computeStorageForCellCenter(problem, scv, prevVolVars);
+        auto curCCStorage = asImp_().computeStorageForCellCenter(problem, scv, curVolVars);
 
         prevCCStorage *= prevVolVars.extrusionFactor();
         curCCStorage *= curVolVars.extrusionFactor();
@@ -248,7 +246,7 @@ public:
                            const SubControlVolumeFace& scvf) const
     {
         // the source term:
-        auto source = asImp_().computeSourceForFace(problem, element, fvGeometry, scvf, elemVolVars, elemFaceVars, simpleMomentumBalanceSummands);
+        auto source = asImp_().computeSourceForFace(problem, element, fvGeometry, scvf, elemVolVars, elemFaceVars);
         const auto& scv = fvGeometry.scv(scvf.insideScvIdx());
         const auto extrusionFactor = elemVolVars[scv].extrusionFactor();
 
@@ -274,7 +272,6 @@ public:
         assert(timeLoop_ && "no time loop set for storage term evaluation");
         FaceResidualValue storage(0.0);
         asImp().evalStorageForFace(simpleMomentumBalanceSummands, problem(), element, fvGeometry, prevElemVolVars, curElemVolVars, prevElemFaceVars, curElemFaceVars, scvf);
-        return storage;
     }
 
     //! Evaluate the storage terms for a face residual

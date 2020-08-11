@@ -53,6 +53,17 @@ struct ChannelTest { using InheritsFrom = std::tuple<NavierStokesNI, StaggeredFr
 #endif
 } // end namespace TTag
 
+//! Set the SimpleMassBalanceSummands
+template<class TypeTag>
+struct SimpleMassBalanceSummands<TypeTag, TTag::FreeFlow> { using type = MySimpleMassBalanceSummands<GetPropType<TypeTag, Properties::CellCenterPrimaryVariables>, TypeTag>; };
+
+//! Set the SimpleMomentumBalanceSummands
+template<class TypeTag>
+struct SimpleMomentumBalanceSummands<TypeTag, TTag::FreeFlow> { using type = MySimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>; };
+
+template<class TypeTag>
+struct SimpleMomentumBalanceSummandsVector<TypeTag, TTag::FreeFlow> { using type = std::vector<MySimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>>; };
+
 // the fluid system
 template<class TypeTag>
 struct FluidSystem<TypeTag, TTag::ChannelTest>
@@ -79,18 +90,7 @@ struct EnableGridGeometryCache<TypeTag, TTag::ChannelTest> { static constexpr bo
 template<class TypeTag>
 struct EnableGridFluxVariablesCache<TypeTag, TTag::ChannelTest> { static constexpr bool value = true; };
 template<class TypeTag>
-struct EnableGridVolumeVariablesCache<TypeTag, TTag::ChannelTest> { static constexpr bool value = true; };#
-
-//! Set the SimpleMassBalanceSummands
-template<class TypeTag>
-struct SimpleMassBalanceSummands<TypeTag, TTag::ChannelTest> { using type = SimpleMassBalanceSummands<GetPropType<TypeTag, Properties::CellCenterPrimaryVariables>, TypeTag>; };
-
-//! Set the SimpleMomentumBalanceSummands
-template<class TypeTag>
-struct SimpleMomentumBalanceSummands<TypeTag, TTag::ChannelTest> { using type = SimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>; };
-
-template<class TypeTag>
-struct SimpleMomentumBalanceSummandsVector<TypeTag, TTag::ChannelTest> { using type = std::vector<SimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>>; };
+struct EnableGridVolumeVariablesCache<TypeTag, TTag::ChannelTest> { static constexpr bool value = true; };
 } // end namespace Properties
 
 /*!

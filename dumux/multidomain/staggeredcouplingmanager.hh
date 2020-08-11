@@ -53,9 +53,6 @@ class StaggeredCouplingManager: virtual public CouplingManager<MDTraits>
     using GridIndexType = typename IndexTraits< GridView<0> >::GridIndex;
     using CouplingStencil = std::vector<GridIndexType>;
 
-    using SimpleMassBalanceSummands = typename LocalResidual::SimpleMassBalanceSummands;
-    using SimpleMomentumBalanceSummands = typename LocalResidual::SimpleMomentumBalanceSummands;
-
 public:
 
     using ParentType::evalCouplingResidual;
@@ -153,11 +150,10 @@ public:
     decltype(auto) evalCouplingResidual(Dune::index_constant<cellCenterIdx> domainI,
                                         const LocalAssemblerI& localAssemblerI,
                                         Dune::index_constant<j> domainJ,
-                                        std::size_t dofIdxGlobalJ,
-                                        SimpleMassBalanceSummands& simpleMassBalanceSummands) const
+                                        std::size_t dofIdxGlobalJ) const
     {
         static_assert(domainI != domainJ, "Domain i cannot be coupled to itself!");
-        return localAssemblerI.evalLocalResidualForCellCenter(simpleMassBalanceSummands);
+        return localAssemblerI.evalLocalResidualForCellCenter();
     }
 
      /*!
@@ -181,11 +177,10 @@ public:
                                         const SubControlVolumeFace& scvfI,
                                         const LocalAssemblerI& localAssemblerI,
                                         Dune::index_constant<j> domainJ,
-                                        std::size_t dofIdxGlobalJ,
-                                        SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
+                                        std::size_t dofIdxGlobalJ) const
     {
         static_assert(domainI != domainJ, "Domain i cannot be coupled to itself!");
-        return localAssemblerI.evalLocalResidualForFace(scvfI, simpleMomentumBalanceSummands);
+        return localAssemblerI.evalLocalResidualForFace(scvfI);
     }
 
     /*!

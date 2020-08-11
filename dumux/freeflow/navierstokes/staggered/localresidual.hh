@@ -96,7 +96,7 @@ public:
     using ParentType::ParentType;
 
     //! Evaluate fluxes entering or leaving the cell center control volume.
-    void computeFluxForCellCenter(const Problem& problem,
+    CellCenterPrimaryVariables computeFluxForCellCenter(const Problem& problem,
                                                         const Element &element,
                                                         const FVElementGeometry& fvGeometry,
                                                         const ElementVolumeVariables& elemVolVars,
@@ -114,13 +114,12 @@ public:
     }
 
     //! Evaluate the source term for the cell center control volume.
-    void computeSourceForCellCenter(const Problem& problem,
+    CellCenterPrimaryVariables computeSourceForCellCenter(const Problem& problem,
                                                           const Element &element,
                                                           const FVElementGeometry& fvGeometry,
                                                           const ElementVolumeVariables& elemVolVars,
                                                           const ElementFaceVariables& elemFaceVars,
-                                                          const SubControlVolume &scv,
-                                    SimpleMassBalanceSummands& simpleMassBalanceSummands) const
+                                                          const SubControlVolume &scv) const
     {
         CellCenterPrimaryVariables result(0.0);
 
@@ -136,10 +135,9 @@ public:
 
 
     //! Evaluate the storage term for the cell center control volume.
-    void computeStorageForCellCenter(const Problem& problem,
+    CellCenterPrimaryVariables computeStorageForCellCenter(const Problem& problem,
                                                            const SubControlVolume& scv,
-                                                           const VolumeVariables& volVars,
-                                     SimpleMassBalanceSummands& simpleMassBalanceSummands) const
+                                                           const VolumeVariables& volVars) const
     {
         CellCenterPrimaryVariables storage;
         storage[Indices::conti0EqIdx - ModelTraits::dim()] = volVars.density();
@@ -150,13 +148,12 @@ public:
     }
 
     //! Evaluate the source term for the face control volume.
-    void computeSourceForFace(const Problem& problem,
+    FacePrimaryVariables computeSourceForFace(const Problem& problem,
                                               const Element& element,
                                               const FVElementGeometry& fvGeometry,
                                               const SubControlVolumeFace& scvf,
                                               const ElementVolumeVariables& elemVolVars,
-                                              const ElementFaceVariables& elemFaceVars,
-                                              SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
+                                              const ElementFaceVariables& elemFaceVars) const
     {
         FacePrimaryVariables source(0.0);
         const auto& insideVolVars = elemVolVars[scvf.insideScvIdx()];
@@ -177,7 +174,7 @@ public:
                                             SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands) const
     {
         FluxVariables fluxVars;
-        return fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
+        fluxVars.computeMomentumFlux(problem, element, scvf, fvGeometry, elemVolVars, elemFaceVars, elemFluxVarsCache.gridFluxVarsCache(), simpleMomentumBalanceSummands);
     }
 
     /*!
@@ -204,7 +201,7 @@ public:
                 return;
 
             // treat Dirichlet and outflow BCs
-            result = computeFluxForCellCenter(problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf, elemFluxVarsCache, simpleMassBalanceSummands);
+            result = computeFluxForCellCenter(problem, element, fvGeometry, elemVolVars, elemFaceVars, scvf, elemFluxVarsCache);
 
             // treat Neumann BCs, i.e. overwrite certain fluxes by user-specified values
             static constexpr auto numEqCellCenter = CellCenterResidual::dimension;
@@ -225,11 +222,11 @@ public:
 
             //non-Dirichlet case
             if(!bcTypes.isDirichlet(Indices::velocity(scvf.directionIndex()))){
-                simpleMassBalanceSummands.coefficients[scvf.localFaceIdx()] += boundaryFlux;
+                simpleMassBalanceSummands.coefficients[scvf.localFaceIdx()] += result;
             }
             //Dirichlet case
             else{
-                simpleMassBalanceSummands.RHS[scvf.localFaceIdx()] -= boundaryFlux;
+                simpleMassBalanceSummands.RHS[scvf.localFaceIdx()] -= result;
             }
 
 //             // account for wall functions, if used

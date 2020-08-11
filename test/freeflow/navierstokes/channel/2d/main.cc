@@ -128,44 +128,6 @@ int main(int argc, char** argv) try
     using NonlinearSolver = Dumux::SimpleSolver<Assembler, LinearSolver, LinearSolver>;
     NonlinearSolver nonLinearSolver(assembler, linearSolver, linearSolver);
 
-    // set up two surfaces over which fluxes are calculated
-    FluxOverSurface<GridVariables,
-                    SolutionVector,
-                    GetPropType<TypeTag, Properties::ModelTraits>,
-                    GetPropType<TypeTag, Properties::LocalResidual>> flux(*gridVariables, x);
-    using GridView = typename GetPropType<TypeTag, Properties::GridGeometry>::GridView;
-    using Element = typename GridView::template Codim<0>::Entity;
-
-    using GlobalPosition = typename Element::Geometry::GlobalCoordinate;
-
-    const Scalar xMin = gridGeometry->bBoxMin()[0];
-    const Scalar xMax = gridGeometry->bBoxMax()[0];
-    const Scalar yMin = gridGeometry->bBoxMin()[1];
-    const Scalar yMax = gridGeometry->bBoxMax()[1];
-
-    // The first surface shall be placed at the middle of the channel.
-    // If we have an odd number of cells in x-direction, there would not be any cell faces
-    // at the position of the surface (which is required for the flux calculation).
-    // In this case, we add half a cell-width to the x-position in order to make sure that
-    // the cell faces lie on the surface. This assumes a regular cartesian grid.
-    const Scalar planePosMiddleX = xMin + 0.5*(xMax - xMin);
-    int numCellsX = getParam<std::vector<int>>("Grid.Cells")[0];
-
-    const unsigned int refinement = getParam<unsigned int>("Grid.Refinement", 0);
-
-    numCellsX *= (1<<refinement);
-
-    const Scalar offsetX = (numCellsX % 2 == 0) ? 0.0 : 0.5*((xMax - xMin) / numCellsX);
-
-    const auto p0middle = GlobalPosition{planePosMiddleX + offsetX, yMin};
-    const auto p1middle = GlobalPosition{planePosMiddleX + offsetX, yMax};
-    flux.addSurface("middle", p0middle, p1middle);
-
-    // The second surface is placed at the outlet of the channel.
-    const auto p0outlet = GlobalPosition{xMax, yMin};
-    const auto p1outlet = GlobalPosition{xMax, yMax};
-    flux.addSurface("outlet", p0outlet, p1outlet);
-
     // time loop
     timeLoop->start(); do
     {
@@ -181,24 +143,6 @@ int main(int argc, char** argv) try
 
         // write vtk output
         vtkWriter.write(timeLoop->time());
-
-        // calculate and print mass fluxes over the planes
-        flux.calculateMassOrMoleFluxes();
-        if(GetPropType<TypeTag, Properties::ModelTraits>::enableEnergyBalance())
-        {
-            std::cout << "mass / energy flux at middle is: " << flux.netFlux("middle") << std::endl;
-            std::cout << "mass / energy flux at outlet is: " << flux.netFlux("outlet") << std::endl;
-        }
-        else
-        {
-            std::cout << "mass flux at middle is: " << flux.netFlux("middle") << std::endl;
-            std::cout << "mass flux at outlet is: " << flux.netFlux("outlet") << std::endl;
-        }
-
-        // calculate and print volume fluxes over the planes
-        flux.calculateVolumeFluxes();
-        std::cout << "volume flux at middle is: " << flux.netFlux("middle")[0] << std::endl;
-        std::cout << "volume flux at outlet is: " << flux.netFlux("outlet")[0] << std::endl;
 
         // report statistics of this time step
         timeLoop->reportTimeStep();

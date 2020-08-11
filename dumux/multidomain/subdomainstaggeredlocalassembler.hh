@@ -31,7 +31,6 @@
 #include <dune/common/hybridutilities.hh>
 #include <dune/grid/common/gridenums.hh> // for GhostEntity
 
-#include <dumux/assembly/simpleassemblystructs.hh>
 #include <dumux/common/reservedblockvector.hh>
 #include <dumux/common/properties.hh>
 #include <dumux/common/parameters.hh>
@@ -42,6 +41,14 @@
 #include <dumux/discretization/staggered/elementsolution.hh>
 
 namespace Dumux {
+namespace Properties{
+template<class TypeTag, class MyTypeTag>
+struct SimpleMassBalanceSummands { using type = UndefinedProperty; };
+template<class TypeTag, class MyTypeTag>
+struct SimpleMomentumBalanceSummands { using type = UndefinedProperty; };
+template<class TypeTag, class MyTypeTag>
+struct SimpleMomentumBalanceSummandsVector { using type = UndefinedProperty; };
+}
 
 /*!
  * \ingroup Assembly
@@ -138,13 +145,19 @@ public:
 
         if constexpr (domainId == cellCenterId)
         {
+            SimpleMassBalanceSummands simpleMassBalanceSummands(this->element(), this->fvGeometry());
+
             const auto cellCenterGlobalI = problem().gridGeometry().elementMapper().index(this->element());
-            res[cellCenterGlobalI] = this->asImp_().assembleCellCenterResidualImpl();
+            res[cellCenterGlobalI] = this->asImp_().assembleCellCenterResidualImpl(simpleMassBalanceSummands);
         }
         else
         {
             for (auto&& scvf : scvfs(this->fvGeometry()))
-                res[scvf.dofIndex()] +=  this->asImp_().assembleFaceResidualImpl(scvf);
+            {
+                SimpleMomentumBalanceSummands simpleMomentumBalanceSummands(scvf);
+
+                res[scvf.dofIndex()] +=  this->asImp_().assembleFaceResidualImpl(scvf, simpleMomentumBalanceSummands);
+            }
         }
     }
 
@@ -241,7 +254,7 @@ public:
 
         if (this->elementIsGhost())
         {
-            simpleMomentumBalanceSummands.setToZero();
+            simpleMomentumBalanceSummands.setToZero(scvf);
             return FaceResidualValue(0.0);
         }
 
@@ -277,8 +290,8 @@ public:
         const int numSubFaces = scvf.pairData().size();
         for (int localSubFaceIdx = 0; localSubFaceIdx < numSubFaces; ++localSubFaceIdx){
             res += simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityParallel(localSubFaceIdx);
-            res += simpleMomentumBalanceSummands.innerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityNormalInside(localSubFaceIdx);
-            res += simpleMomentumBalanceSummands.outerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityNormalOutside(localSubFaceIdx);
+            res += simpleMomentumBalanceSummands.innerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityLateralInside(localSubFaceIdx);
+            res += simpleMomentumBalanceSummands.outerNormalCoefficients[localSubFaceIdx] * elemFaceVars[scvf].velocityLateralOutside(localSubFaceIdx);
         }
 
         res +=
@@ -547,9 +560,9 @@ class SubDomainStaggeredLocalAssembler<id, TypeTag, Assembler, DiffMethod::numer
     static constexpr auto numEqCellCenter = CellCenterPrimaryVariables::dimension;
     static constexpr auto numEqFace = FacePrimaryVariables::dimension;
 
-    using SimpleMassBalanceSummands = typename GET_PROP_TYPE(TypeTag, SimpleMassBalanceSummands);
-    using SimpleMomentumBalanceSummands = typename GET_PROP_TYPE(TypeTag, SimpleMomentumBalanceSummands);
-    using SimpleMomentumBalanceSummandsVector = typename GET_PROP_TYPE(TypeTag, SimpleMomentumBalanceSummandsVector);
+    using SimpleMassBalanceSummands = GetPropType<TypeTag, Properties::SimpleMassBalanceSummands>;
+    using SimpleMomentumBalanceSummands = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummands>;
+    using SimpleMomentumBalanceSummandsVector = GetPropType<TypeTag, Properties::SimpleMomentumBalanceSummandsVector>;
 
 public:
     using ParentType::ParentType;
@@ -587,7 +600,7 @@ public:
      * \return The element residual at the current solution.
      */
     template<class JacobianMatrixDiagBlock, class GridVariables>
-    void assembleFaceCoefficientMatrixAndRHSImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
+    void assembleFaceCoefficientMatrixAndRHSImpl(JacobianMatrixDiagBlock& A, GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
     {
         assert(domainI == faceId);
 
@@ -616,14 +629,14 @@ public:
                 {
                     const auto& data = scvf.pairData(localSubFaceIdx);
 
-                    updateGlobalJacobian_(A, faceGlobalI, data.normalPair.first, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].innerNormalCoefficients[localSubFaceIdx]);
-                    if(data.outerParallelFaceDofIdx >= 0)
+                    updateGlobalJacobian_(A, faceGlobalI, data.lateralPair.first, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].innerNormalCoefficients[localSubFaceIdx]);
+                    if(scvf.hasParallelNeighbor(localSubFaceIdx,0))
                     {
-                        updateGlobalJacobian_(A, faceGlobalI, data.outerParallelFaceDofIdx, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].parallelCoefficients[localSubFaceIdx]);
-                        //note on comparing this with StaggeredFreeFlowConnectivityMap computeFaceToCellCenterStencil_: SIMPLE does not consider the normalPair contributions, such terms are included in the right-hand side
+                        updateGlobalJacobian_(A, faceGlobalI, data.parallelDofs[0], pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].parallelCoefficients[localSubFaceIdx]);
+                        //note on comparing this with StaggeredFreeFlowConnectivityMap computeFaceToCellCenterStencil_: SIMPLE does not consider the lateralPair contributions, such terms are included in the right-hand side
                     }
                     if(!scvf.boundary()){
-                        updateGlobalJacobian_(A, faceGlobalI, data.normalPair.second, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].outerNormalCoefficients[localSubFaceIdx]);
+                        updateGlobalJacobian_(A, faceGlobalI, data.lateralPair.second, pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].outerNormalCoefficients[localSubFaceIdx]);
                     }
                 }
             }
@@ -673,12 +686,12 @@ public:
      */
     template<class JacobianBlock, class GridVariables>
     void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<cellCenterId> domainJ, JacobianBlock& A,
-                                      const ElementResidualVector& origResiduals, GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
+                                      GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
     {}
 
     template<std::size_t otherId, class JacobianBlock, class GridVariables>
     void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
-                                      GridVariables& gridVariables, SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands)
+                                      GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
     {
         // get an alias for convenience
         const auto& fvGeometry = this->fvGeometry();

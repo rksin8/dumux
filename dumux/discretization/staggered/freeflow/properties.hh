@@ -138,7 +138,6 @@ struct VelocityOutput<TypeTag, TTag::StaggeredFreeFlowModel>
  */
 template<class TypeTag>
 struct UpwindSchemeOrder<TypeTag, TTag::StaggeredFreeFlowModel> { static constexpr int value = 1; };
-
 } // namespace Properties
 } // namespace Dumux
 

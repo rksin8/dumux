@@ -93,10 +93,10 @@ public:
     std::vector<IndexType> dirichletBoundaryScvfsIndexSet() const
     {
         std::vector<IndexType> vec;
-        const auto boundaryScvfsIndexSet = (this->fvGridGeometry()).boundaryScvfsIndexSet();
+        const auto boundaryScvfsIndexSet = (this->gridGeometry()).boundaryScvfsIndexSet();
         for (auto& scvfIdx : boundaryScvfsIndexSet)
         {
-            const auto scvf = (this->fvGridGeometry()).boundaryScvf(scvfIdx);
+            const auto scvf = (this->gridGeometry()).boundaryScvf(scvfIdx);
             const auto bcTypes = asImp_().boundaryTypesAtPos(scvf.center());
             if (bcTypes.isDirichlet(Indices::velocity(scvf.directionIndex())))
             {
@@ -110,12 +110,15 @@ public:
     {
         std::vector<IndexType> vec;
 
-        const auto boundaryScvsIndexSet = (this->fvGridGeometry()).boundaryScvsIndexSet();
+        const auto boundaryScvsIndexSet = (this->gridGeometry()).boundaryScvsIndexSet();
         for (auto& scvIdx : boundaryScvsIndexSet)
         {
-            const auto scv = (this->fvGridGeometry()).scv(scvIdx);
-            const auto bcTypes = asImp_().boundaryTypesAtPos(scv.center());
-            if (bcTypes.isDirichletCell(Indices::pressureIdx))
+            const auto scv = (this->gridGeometry()).scv(scvIdx);
+            const auto& element = (this->gridGeometry()).element(scv.elementIndex());
+            auto fvGeometry = localView(this->gridGeometry());
+            fvGeometry.bindElement(element);
+
+            if (asImp_().isDirichletCell(element, fvGeometry, scv, Indices::pressureIdx))
             {
                 vec.push_back(scv.dofIndex());
             }

@@ -60,9 +60,11 @@ public:
      *                                               O position at which gradient is evaluated
      * \endverbatim
      */
-    template<class FaceVariables>
+    template<class Problem, class FaceVariables, class SimpleMomentumBalanceSummands>
     void velocityGradII(const Problem& problem,
+                        const Element& element,
                                  const SubControlVolumeFace& scvf,
+                        const FVElementGeometry& fvGeometry,
                                  const FaceVariables& faceVars,
                                  SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
                                  Scalar factor)
@@ -108,7 +110,7 @@ public:
      *                                                       O position at which gradient is evaluated
      * \endverbatim
      */
-    template<class Problem, class FaceVariables>
+    template<class Problem, class FaceVariables, class SimpleMomentumBalanceSummands>
     void velocityGradIJ(const Problem& problem,
                                  const Element& element,
                                  const FVElementGeometry& fvGeometry,
@@ -120,11 +122,11 @@ public:
                                  SimpleMomentumBalanceSummands& simpleMomentumBalanceSummands,
                                  Scalar factor)
     {
-        factor *= lateralScvf.directionSign();
-        factor /= scvf.parallelDofsDistance(localSubFaceIdx, 0);
-
         const auto eIdx = scvf.insideScvIdx();
         const auto& lateralScvf = fvGeometry.scvf(eIdx, scvf.pairData(localSubFaceIdx).localLateralFaceIdx);
+
+        factor *= lateralScvf.directionSign();
+        factor /= scvf.parallelDofsDistance(localSubFaceIdx, 0);
 
         if (!(lateralScvf.boundary() && problem.boundaryTypes(element, lateralScvf).isOutflow(Indices::velocity(scvf.directionIndex()))))
         {
@@ -138,7 +140,7 @@ public:
 
         if (!lateralScvf.boundary())
         {
-            const auto parallelFace = fvGeometry.scvf(normalFace.outsideScvIdx(), scvf.localFaceIdx());
+            const auto parallelFace = fvGeometry.scvf(lateralScvf.outsideScvIdx(), scvf.localFaceIdx());
             if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
                 simpleMomentumBalanceSummands.RHS += factor * faceVars.velocityParallel(localSubFaceIdx, 0);
             }
@@ -190,7 +192,7 @@ public:
      *                                              O position at which gradient is evaluated
      * \endverbatim
      */
-    template<class Problem, class FaceVariables>
+    template<class Problem, class FaceVariables, class SimpleMomentumBalanceSummands>
     void velocityGradJI(const Problem& problem,
                                  const Element& element,
                                  const FVElementGeometry& fvGeometry,
@@ -226,6 +228,8 @@ public:
             simpleMomentumBalanceSummands.innerNormalCoefficients[localSubFaceIdx] -= factor;
         }
 
+        const auto outerNormalFace = fvGeometry.scvf(scvf.outsideScvIdx(), lateralScvf.localFaceIdx());
+
         if (!scvf.boundary())
         {
             if(outerNormalFace.boundary() && problem.boundaryTypes(element, outerNormalFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
@@ -244,7 +248,7 @@ public:
         }
         else
         {
-            DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for this boundary type ";
+            DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for this boundary type ");
         }
     }
 
@@ -300,7 +304,8 @@ public:
                     return 0.0;
             }
 
-            return velocityGradIJ(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx);
+            DUNE_THROW(Dune::InvalidStateException, "not correct here for SIMPLE.");
+            return 0.0;
         }();
 
         return problem.beaversJosephVelocity(element,
@@ -360,7 +365,8 @@ public:
                     return 0.0;
             }
 
-            return velocityGradJI(problem, element, fvGeometry, scvf, faceVars, currentScvfBoundaryTypes, lateralFaceBoundaryTypes, localSubFaceIdx);
+            DUNE_THROW(Dune::InvalidStateException, "not correct here for SIMPLE.");
+            return 0.0;
         }();
 
         return problem.beaversJosephVelocity(element,
