@@ -4,11 +4,11 @@ TEnd = 2 # [s]
 
 [Grid]
 UpperRight = 10 1
-Cells = 100 50
+Cells = 10 5
 
 [Problem]
 Name = test_channel_navierstokes # name passed to the output routines
-InletVelocity = 1000
+InletVelocity = 1
 EnableGravity = false
 
 [Component]
@@ -35,3 +35,6 @@ precVerbosityA = 0
 precVerbositySchurAppr = 0
 precMaxIter = 2000
 precResidReduction = 1e-13
+
+[Algorithm]
+AlgorithmType = 2

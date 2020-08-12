@@ -221,16 +221,16 @@ public:
     {
         PrimaryVariables values;
         values[Indices::pressureIdx] = 1.1e+5;
-        values[Indices::velocityXIdx] = 0.0;
+//         values[Indices::velocityXIdx] = 0.0;
         values[Indices::velocityYIdx] = 0.0;
 
-        if(isInlet(globalPos))
-        {
+//         if(isInlet(globalPos))
+//         {
             const auto& y = globalPos[1];
             const auto& yMax = this->fvGridGeometry().bBoxMax()[1];
             const auto& vMax = inletVelocity_;
             values[Indices::velocityXIdx] = 4 * vMax * y * (yMax - y)/(yMax * yMax);
-        }
+//         }
 
 #if NONISOTHERMAL
         values[Indices::temperatureIdx] = 283.15;
