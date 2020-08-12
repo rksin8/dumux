@@ -70,7 +70,7 @@ public:
                                  Scalar factor)
     {
         if(scvf.boundary() && problem.boundaryTypes(element, scvf).isDirichlet(Indices::velocity(scvf.directionIndex()))){
-            simpleMomentumBalanceSummands.RHS -= faceVars.velocitySelf() * factor;;
+            simpleMomentumBalanceSummands.RHS -= faceVars.velocitySelf() * factor;
         }
         else {
             simpleMomentumBalanceSummands.selfCoefficient += factor;;
@@ -130,34 +130,38 @@ public:
 
         if (!(lateralScvf.boundary() && problem.boundaryTypes(element, lateralScvf).isOutflow(Indices::velocity(scvf.directionIndex()))))
         {
-            const Scalar innerParallelVelocity = faceVars.velocitySelf();
-            simpleMomentumBalanceSummands.RHS -= factor* innerParallelVelocity;
-        }
-        else
-        {
-           simpleMomentumBalanceSummands.selfCoefficient += factor;
-        }
+            if (scvf.boundary() && problem.boundaryTypes(element, scvf).isDirichlet(Indices::velocity(scvf.directionIndex())))
+            {
+                const Scalar innerParallelVelocity = faceVars.velocitySelf();
+                simpleMomentumBalanceSummands.RHS -= factor* innerParallelVelocity;
 
-        if (!lateralScvf.boundary())
-        {
-            const auto parallelFace = fvGeometry.scvf(lateralScvf.outsideScvIdx(), scvf.localFaceIdx());
-            if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
-                simpleMomentumBalanceSummands.RHS += factor * faceVars.velocityParallel(localSubFaceIdx, 0);
             }
-            else{
-                simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] -= factor;
+            else
+            {
+            simpleMomentumBalanceSummands.selfCoefficient += factor;
             }
-        }
-        else if (lateralFaceBoundaryTypes->isDirichlet(Indices::velocity(scvf.directionIndex())))
-        {
-            // Sample the value of the Dirichlet BC at the center of the staggered lateral face.
-            const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
-            const auto lateralBoundaryFace = makeStaggeredBoundaryFace(lateralScvf, lateralBoundaryFacePos);
-            simpleMomentumBalanceSummands.RHS += factor * problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(scvf.directionIndex())];
-        }
-        else
-        {
-            DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for other boundary types");
+
+            if (!lateralScvf.boundary())
+            {
+                const auto parallelFace = fvGeometry.scvf(lateralScvf.outsideScvIdx(), scvf.localFaceIdx());
+                if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))){
+                    simpleMomentumBalanceSummands.RHS += factor * faceVars.velocityParallel(localSubFaceIdx, 0);
+                }
+                else{
+                    simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] -= factor;
+                }
+            }
+            else if (lateralFaceBoundaryTypes->isDirichlet(Indices::velocity(scvf.directionIndex())))
+            {
+                // Sample the value of the Dirichlet BC at the center of the staggered lateral face.
+                const auto& lateralBoundaryFacePos = lateralStaggeredFaceCenter_(scvf, localSubFaceIdx);
+                const auto lateralBoundaryFace = makeStaggeredBoundaryFace(lateralScvf, lateralBoundaryFacePos);
+                simpleMomentumBalanceSummands.RHS += factor * problem.dirichlet(element, lateralBoundaryFace)[Indices::velocity(scvf.directionIndex())];
+            }
+            else
+            {
+                DUNE_THROW(Dune::InvalidStateException, "SIMPLE not prepared for other boundary types");
+            }
         }
     }
 
