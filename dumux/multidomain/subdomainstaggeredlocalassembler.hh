@@ -687,11 +687,6 @@ public:
     template<class JacobianBlock, class GridVariables>
     void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<cellCenterId> domainJ, JacobianBlock& A,
                                       GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
-    {}
-
-    template<std::size_t otherId, class JacobianBlock, class GridVariables>
-    void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
-                                      GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
     {
         // get an alias for convenience
         const auto& fvGeometry = this->fvGeometry();
@@ -708,6 +703,12 @@ public:
                 updateGlobalJacobian_(A, faceGlobalI, scvf.insideScvIdx(), pvIdx, simpleMomentumBalanceSummandsVector[scvf.localFaceIdx()].pressureCoefficient);
             }
         }
+    }
+
+    template<std::size_t otherId, class JacobianBlock, class GridVariables>
+    void assembleCoefficientMatrixFaceCoupling(Dune::index_constant<otherId> domainJ, JacobianBlock& A,
+                                      GridVariables& gridVariables, SimpleMomentumBalanceSummandsVector& simpleMomentumBalanceSummandsVector)
+    {
     }
 
     template<class JacobianMatrixDiagBlock, class GridVariables>
