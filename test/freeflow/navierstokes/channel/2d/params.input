@@ -12,6 +12,7 @@ InletVelocity = 1
 EnableGravity = false
 EnableInertiaTerms = false
 OutletCondition = Outflow
+UseVelocityProfile = true
 
 [Component]
 LiquidDensity = 1.0
