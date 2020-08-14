@@ -17,178 +17,139 @@
  *   along with this program.  If not, see <http://www.gnu.org/licenses/>.   *
  *****************************************************************************/
 
-#ifndef DUMUX_NAVIERSTOKES_FLUXHELPER_HH
-#define DUMUX_NAVIERSTOKES_FLUXHELPER_HH
+#ifndef DUMUX_NAVIERSTOKES_BOUNDARY_FLUXHELPER_HH
+#define DUMUX_NAVIERSTOKES_BOUNDARY_FLUXHELPER_HH
 
-#include <dumux/common/math.hh>
-#include <dumux/discretization/staggered/elementsolution.hh>
+#include <type_traits>
+#include <dune/common/float_cmp.hh>
+#include <dumux/common/parameters.hh>
+#include <dumux/discretization/cellcentered/elementsolution.hh>
 
 namespace Dumux {
-namespace NavierStokes {
 
-template<class Traits>
-class UpwindFluxHelper
+class NavierStokesBoundaryFluxHelper
 {
-    static constexpr bool enableEneryBalance = Traits::enableEnergyBalance();
-    static constexpr bool isCompositional = (Traits::numFluidComponents() > 1);
 
 public:
-    template <class VolumeVariables, class SubControlVolumeFace, class Scalar>
-    static Scalar advectiveEnergyFlux(const VolumeVariables& insideVolVars,
-                                      const VolumeVariables& outsideVolVars,
-                                      const SubControlVolumeFace& scvf,
-                                      const Scalar velocity,
-                                      const Scalar upwindWeight)
-    {
-        auto upwindTerm = [](const auto& volVars) { return volVars.density() * volVars.enthalpy(); };
-        return advectiveUpwindFlux(insideVolVars,
-                                   outsideVolVars,
-                                   scvf,
-                                   velocity,
-                                   upwindWeight,
-                                   upwindTerm);
-    }
 
-    template <bool enable = isCompositional, std::enable_if_t<!enable, int> = 0,
-              class VolumeVariables, class SubControlVolumeFace, class Scalar>
-    static Scalar massFlux(const VolumeVariables& insideVolVars,
-                           const VolumeVariables& outsideVolVars,
-                           const SubControlVolumeFace& scvf,
-                           const Scalar velocity,
-                           const Scalar upwindWeight)
-    {
-        auto upwindTerm = [](const auto& volVars) { return volVars.density(); };
-        return advectiveUpwindFlux(insideVolVars,
-                                   outsideVolVars,
-                                   scvf,
-                                   velocity,
-                                   upwindWeight,
-                                   upwindTerm);
-    }
-
-    template <bool enable = isCompositional, std::enable_if_t<enable, int> = 0,
-              class VolumeVariables, class SubControlVolumeFace, class Scalar>
-    static Scalar advectiveComponentFlux(const VolumeVariables& insideVolVars,
-                                         const VolumeVariables& outsideVolVars,
-                                         const SubControlVolumeFace& scvf,
-                                         const Scalar velocity,
-                                         const Scalar upwindWeight,
-                                         const int compIdx)
-    {
-        static constexpr bool useMoles = Traits::useMoles();
-
-        auto upwindTerm = [compIdx](const auto& volVars)
-        {
-            const auto density = useMoles ? volVars.molarDensity() : volVars.density();
-            const auto fraction = useMoles ? volVars.moleFraction(compIdx) : volVars.massFraction(compIdx);
-            return density * fraction;
-        };
-
-        return advectiveUpwindFlux(insideVolVars,
-                                   outsideVolVars,
-                                   scvf,
-                                   velocity,
-                                   upwindWeight,
-                                   upwindTerm);
-    }
-
+    /*!
+     * \brief Return the area-specific, weighted advective flux of a scalar quantity.
+     */
     template<class VolumeVariables, class SubControlVolumeFace, class Scalar, class UpwindTerm>
     static Scalar advectiveUpwindFlux(const VolumeVariables& insideVolVars,
                                       const VolumeVariables& outsideVolVars,
                                       const SubControlVolumeFace& scvf,
-                                      const Scalar velocity,
+                                      const Scalar volumeFlux,
                                       const Scalar upwindWeight,
                                       UpwindTerm upwindTerm)
     {
-        const bool insideIsUpstream = scvf.directionSign() == sign(velocity);
+        using std::signbit;
+        const bool insideIsUpstream = !signbit(volumeFlux);
 
         const auto& upstreamVolVars = insideIsUpstream ? insideVolVars : outsideVolVars;
         const auto& downstreamVolVars = insideIsUpstream ? outsideVolVars : insideVolVars;
 
-        const Scalar flux = (upwindWeight * upwindTerm(upstreamVolVars) +
-                            (1.0 - upwindWeight) * upwindTerm(downstreamVolVars))
-                            * velocity * scvf.directionSign();
-
-        return flux;
-    }
-};
-
-template<class Traits, class Vector, int offset = 0>
-class BoundaryFluxHelper
-{
-    static constexpr bool enableEneryBalance = Traits::enableEnergyBalance();
-    static constexpr bool isCompositional = (Traits::numFluidComponents() > 1);
-
-    using FluxHelper = UpwindFluxHelper<Traits>;
-
-public:
-    template<class VolumeVariables, class SubControlVolumeFace, class Scalar>
-    static Vector outflowFlux(const VolumeVariables& insideVolVars,
-                              const VolumeVariables& outsideVolVars,
-                              const SubControlVolumeFace& scvf,
-                              const Scalar velocity,
-                              const Scalar upwindWeight = 1.0)
-    {
-        Vector flux(0.0);
-        advectiveFlux(flux, insideVolVars, outsideVolVars, scvf, velocity, upwindWeight);
-
-        return flux;
+        return (upwindWeight * upwindTerm(upstreamVolVars) +
+               (1.0 - upwindWeight) * upwindTerm(downstreamVolVars))
+               * volumeFlux;
     }
 
-    template<class Problem, class Element, class FVElementGeometry, class VolumeVariables, class Scalar>
-    static Vector outflowFlux(const Problem& problem,
-                              const Element& element,
-                              const FVElementGeometry& fvGeometry,
-                              const VolumeVariables& insideVolVars,
-                              typename VolumeVariables::PrimaryVariables&& boundaryPriVars,
-                              const typename FVElementGeometry::SubControlVolumeFace& scvf,
-                              const Scalar velocity,
-                              const Scalar upwindWeight = 1.0)
+
+    /*!
+     * \brief Return the area-specific outflow flux for all scalar balance equations.
+     *        The values specified in outsideBoundaryPriVars are used in case of flow reversal.
+     */
+    template<class Problem, class Element, class FVElementGeometry, class ElementVolumeVariables, class PrimaryVariables, class Scalar>
+    static auto outflowFlux(const Problem& problem,
+                            const Element& element,
+                            const FVElementGeometry& fvGeometry,
+                            const typename FVElementGeometry::SubControlVolumeFace& scvf,
+                            const ElementVolumeVariables& elemVolVars,
+                            PrimaryVariables&& outsideBoundaryPriVars,
+                            const Scalar upwindWeight = 1.0)
     {
-        Vector flux(0.0);
-        VolumeVariables boundaryVolVars;
-        boundaryVolVars.update(elementSolution<FVElementGeometry>(std::move(boundaryPriVars)),
-                               problem,
-                               element,
-                               fvGeometry.scv(scvf.insideScvIdx()));
-
-        advectiveFlux(flux, insideVolVars, boundaryVolVars, scvf, velocity, upwindWeight);
-
-        return flux;
-    }
-
-    template<class VolumeVariables, class SubControlVolumeFace, class Scalar>
-    static void advectiveFlux(Vector& flux,
-                              const VolumeVariables& insideVolVars,
-                              const VolumeVariables& outsideVolVars,
-                              const SubControlVolumeFace& scvf,
-                              const Scalar velocity,
-                              const Scalar upwindWeight)
-    {
-        if constexpr (!isCompositional)
-            flux[Traits::Indices::conti0EqIdx - offset] = FluxHelper::massFlux(insideVolVars, outsideVolVars, scvf, velocity, upwindWeight);
-        else
+        using NumEqVector = PrimaryVariables;
+        using VolumeVariables = typename ElementVolumeVariables::VolumeVariables;
+        NumEqVector flux;
+        const auto velocity = problem.faceVelocity(element,fvGeometry, scvf);
+        const auto volumeFlux = velocity * scvf.unitOuterNormal();
+        using std::signbit;
+        const bool insideIsUpstream = !signbit(volumeFlux);
+        const VolumeVariables& insideVolVars = elemVolVars[scvf.insideScvIdx()];
+        const VolumeVariables& outsideVolVars = [&]()
         {
-            static constexpr auto numComponents = Traits::numFluidComponents();
-
-            for (int compIdx = 0; compIdx < numComponents; ++compIdx)
+            // only use the inside volVars for "true" outflow conditions (avoid constructing the outside volVars)
+            if (insideIsUpstream && Dune::FloatCmp::eq(upwindWeight, 1.0, 1e-6))
+                return insideVolVars;
+            else
             {
-                flux[Traits::Indices::conti0EqIdx + compIdx - offset] = FluxHelper::advectiveComponentFlux(insideVolVars, outsideVolVars, scvf, velocity, upwindWeight, compIdx);
+                // construct outside volVars from the given priVars for situations of flow reversal
+                VolumeVariables boundaryVolVars;
+                boundaryVolVars.update(elementSolution<FVElementGeometry>(std::forward<PrimaryVariables>(outsideBoundaryPriVars)),
+                                       problem,
+                                       element,
+                                       fvGeometry.scv(scvf.insideScvIdx()));
+                return boundaryVolVars;
             }
+        }();
 
-            // in case one balance is substituted by the total mass balance
-            if constexpr (Traits::replaceCompEqIdx() < numComponents)
-            {
-                flux[Traits::Indices::conti0EqIdx + Traits::replaceCompEqIdx() - offset] = std::accumulate(flux.begin(), flux.end(), 0.0);
-            }
+        static constexpr bool isCompositional = (VolumeVariables::numFluidComponents() > 1);
+
+        if constexpr (!isCompositional)
+        {
+            auto upwindTerm = [&](const VolumeVariables& volVars){ return volVars.density(); };
+            flux[VolumeVariables::Indices::conti0EqIdx] = advectiveUpwindFlux(insideVolVars, outsideVolVars, scvf, volumeFlux, upwindWeight, upwindTerm);
         }
 
-        if constexpr (enableEneryBalance)
-            flux[Traits::Indices::energyEqIdx - offset] = FluxHelper::advectiveEnergyFlux(insideVolVars, outsideVolVars, scvf, velocity, upwindWeight);
+        return flux;
     }
+
+    /*!
+     * \brief Return the area-specific outflow flux for all scalar balance equations.
+     *        This should only be used of flow reversal does never occur.
+     *        A (deactivable) warning is emitted otherwise.
+     */
+    template<class Problem, class Element, class FVElementGeometry, class ElementVolumeVariables>
+    static auto outflowFlux(const Problem& problem,
+                            const Element& element,
+                            const FVElementGeometry& fvGeometry,
+                            const typename FVElementGeometry::SubControlVolumeFace& scvf,
+                            const ElementVolumeVariables& elemVolVars)
+    {
+        using VolumeVariables = typename ElementVolumeVariables::VolumeVariables;
+        using NumEqVector = typename VolumeVariables::PrimaryVariables;
+        NumEqVector flux;
+        const auto velocity = problem.faceVelocity(element,fvGeometry, scvf);
+        const auto volumeFlux = velocity * scvf.unitOuterNormal();
+        using std::signbit;
+        const bool insideIsUpstream = !signbit(volumeFlux);
+        const VolumeVariables& insideVolVars = elemVolVars[scvf.insideScvIdx()];
+
+        static const bool verbose = getParamFromGroup<bool>(problem.paramGroup(), "Flux.EnableOutflowReversalWarning", true);
+        if (verbose && !insideIsUpstream)
+        {
+            std::cout << "velo " << velocity << ", flux " << volumeFlux << std::endl;
+            std::cout << "\n ********** WARNING ********** \n\n"
+                         "Outflow condition set at " << scvf.center() << " might be invalid due to flow reversal. "
+                         "Consider using \n"
+                         "outflowFlux(problem, element, fvGeometry, scvf, elemVolVars, outsideBoundaryPriVars, upwindWeight) \n"
+                         "instead where you can specify primary variables for inflow situations.\n"
+                         "\n ***************************** \n" << std::endl;
+        }
+
+        static constexpr bool isCompositional = (VolumeVariables::numFluidComponents() > 1);
+
+        if constexpr (!isCompositional)
+        {
+            auto upwindTerm = [&](const VolumeVariables& volVars){ return volVars.density(); };
+            flux[VolumeVariables::Indices::conti0EqIdx] = advectiveUpwindFlux(insideVolVars, insideVolVars, scvf, volumeFlux, 1.0 /*upwindWeight*/, upwindTerm);
+        }
+
+        return flux;
+    }
+
 };
 
-} // end namespace NavierStokes
 } // end namespace Dumux
 
 #endif
