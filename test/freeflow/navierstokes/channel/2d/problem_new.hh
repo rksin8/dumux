@@ -33,6 +33,7 @@
 #include <dumux/material/components/constant.hh>
 #include <dumux/material/components/air.hh>
 
+#include <dumux/freeflow/navierstokes/fluxhelper.hh>
 #include <dumux/freeflow/navierstokes/momentum/model.hh>
 #include <dumux/freeflow/navierstokes/mass/1p/model.hh>
 #include <dumux/freeflow/navierstokes/problem.hh>
@@ -137,7 +138,6 @@ class ChannelTestProblem : public NavierStokesProblem<TypeTag>
 public:
     ChannelTestProblem(std::shared_ptr<const GridGeometry> gridGeometry, std::shared_ptr<CouplingManager> couplingManager)
     : ParentType(gridGeometry, couplingManager)
-    , couplingManager_(couplingManager)
     {
         inletVelocity_ = getParam<Scalar>("Problem.InletVelocity");
         const auto tmp = getParam<std::string>("Problem.OutletCondition", "Outflow");
@@ -185,89 +185,50 @@ public:
     {
         BoundaryTypes values;
 
-
-
-        // if(isInlet_(globalPos))
-        // {
-        //     if constexpr (Impl::isMomentumProblem<TypeTag>())
-        //     {
-        //         values.setDirichlet(Indices::velocityXIdx);
-        //         values.setDirichlet(Indices::velocityYIdx);
-        //     }
-        //     else
-        //     {
-        //         values.setNeumann(0); // TODO idx
-        //     }
-
-        // }
-        // else if(isOutlet_(globalPos))
-        // {
-
-        //     if constexpr (Impl::isMomentumProblem<TypeTag>())
-        //     {
-        //         // values.setNeumann(Indices::momentumXBalanceIdx);
-        //         // values.setNeumann(Indices::momentumYBalanceIdx);
-        //         values.setDirichlet(Indices::velocityXIdx);
-        //         values.setDirichlet(Indices::velocityYIdx);
-        //     }
-        //     else
-        //     {
-        //         values.setNeumann(0); // TODO idx
-        //         // values.setDirichlet(0); // TODO idx
-        //     }
-
-        // }
-        // else
-        // {
-            if constexpr (ParentType::isMomentumProblem())
-            {
-                values.setDirichlet(Indices::velocityXIdx);
-                values.setDirichlet(Indices::velocityYIdx);
-
-
-
-                if (isOutlet_(globalPos))
-                    values.setAllNeumann();
-            }
-            else
-            {
-
-                values.setNeumann(0);
-            }
-                // values.setDirichlet(0);
-
-        // }
-
-        return values;
-    }
-
-
-   /*!
-     * \brief Evaluates the boundary conditions for a Dirichlet control volume.
-     *
-     * \param globalPos The center of the finite volume which ought to be set.
-     */
-    PrimaryVariables dirichletAtPos(const GlobalPosition &globalPos) const
-    {
-        PrimaryVariables values = initialAtPos(globalPos);
-
-//         if(isInlet_(globalPos))
-//         {
-// #if NONISOTHERMAL
-//             // give the system some time so that the pressure can equilibrate, then start the injection of the hot liquid
-//             if(time() >= 200.0)
-//                 values[Indices::temperatureIdx] = 293.15;
-// #endif
-//         }
-
         if constexpr (ParentType::isMomentumProblem())
         {
-            values[Indices::velocityXIdx] = parabolicProfile(globalPos[1], inletVelocity_);
-        }
+            values.setDirichlet(Indices::velocityXIdx);
+            values.setDirichlet(Indices::velocityYIdx);
 
+            if (isOutlet_(globalPos))
+                values.setAllNeumann();
+        }
+        else
+        {
+            values.setNeumann(Indices::conti0EqIdx);
+
+            if (isInlet_(globalPos))
+                values.setDirichlet(Indices::pressureIdx);
+        }
 
         return values;
     }
+
+    /*!
+      * \brief Evaluates the boundary conditions for a Dirichlet control volume.
+      *
+      * \param globalPos The center of the finite volume which ought to be set.
+      */
+     PrimaryVariables dirichlet(const Element& element, const SubControlVolumeFace& scvf) const
+     {
+         const auto& globalPos = scvf.ipGlobal();
+         PrimaryVariables values = initialAtPos(globalPos);
+
+         if constexpr (ParentType::isMomentumProblem())
+             values[Indices::velocityXIdx] = parabolicProfile(globalPos[1], inletVelocity_);
+         else
+         {
+             values[Indices::pressureIdx] = this->couplingManager().cellPressure(element, scvf);
+
+#if NONISOTHERMAL
+            // give the system some time so that the pressure can equilibrate, then start the injection of the hot liquid
+            if (time() >= 200.0)
+                values[Indices::temperatureIdx] = 293.15;
+#endif
+         }
+
+         return values;
+     }
 
     /*!
      * \brief Evaluates the boundary conditions for a Neumann control volume.
@@ -292,13 +253,12 @@ public:
             // pressure contribution
             if (scvf.isFrontal())
             {
-                values[scvf.directionIndex()] = outletPressure_;
-                if constexpr (getPropValue<TypeTag, Properties::NormalizePressure>())
-                    values[scvf.directionIndex()] -= outletPressure_;
+                if (isOutlet_(scvf.center()))
+                    values[scvf.directionIndex()] = outletPressure_ - referencePressure(element, fvGeometry, scvf);
             }
 
             // inertial terms
-            if (this->enableInertiaTerms() && isOutlet_(scvf.ipGlobal()))
+            if (this->enableInertiaTerms())
             {
                 if (scvf.isFrontal())
                     values[Indices::momentumXBalanceIdx] += elemVolVars[scvf.insideScvIdx()].velocity() * elemVolVars[scvf.insideScvIdx()].velocity() * this->density(element, fvGeometry, scvf) * scvf.directionSign();
@@ -387,11 +347,8 @@ public:
 
         else
         {
-            if (isInlet_(scvf.ipGlobal()) || isOutlet_(scvf.ipGlobal()))
-            {
-                const auto insideDensity = isInlet_(scvf.ipGlobal()) ? 1.35313 : elemVolVars[scvf.insideScvIdx()].density();
-                values[Indices::conti0EqIdx] = this->faceVelocity(element, fvGeometry, scvf) * insideDensity * scvf.unitOuterNormal();
-            }
+            if (isOutlet_(scvf.ipGlobal()))
+                values[Indices::conti0EqIdx] = NavierStokesBoundaryFluxHelper::outflowFlux(*this, element, fvGeometry, scvf, elemVolVars);
         }
 
         return values;
@@ -449,9 +406,7 @@ public:
                 values[Indices::velocityXIdx] = inletVelocity_;
         }
         else
-        {
             values[Indices::pressureIdx] = outletPressure_;
-        }
 
 #if NONISOTHERMAL
         values[Indices::temperatureIdx] = 283.15;
@@ -460,6 +415,16 @@ public:
 
         return values;
     }
+
+    /*!
+     * \brief Returns a reference pressure at a given sub control volume face.
+     *        This pressure is substracted from the actual pressure for the momentum balance
+     *        which potentially helps to improve numerical accuracy by avoiding issues related do floating point arithmetic.
+     */
+    Scalar referencePressure(const Element& element,
+                             const FVElementGeometry& fvGeometry,
+                             const SubControlVolumeFace& scvf) const
+    { return outletPressure_; }
 
     // \}
     void setTimeLoop(TimeLoopPtr timeLoop)
@@ -487,13 +452,12 @@ private:
         return globalPos[0] > this->gridGeometry().bBoxMax()[0] - eps_;
     }
 
-    static constexpr Scalar eps_=1e-6;
+    static constexpr Scalar eps_ = 1e-6;
     Scalar inletVelocity_;
     Scalar outletPressure_;
     OutletCondition outletCondition_;
     bool useVelocityProfile_;
     TimeLoopPtr timeLoop_;
-    std::shared_ptr<CouplingManager> couplingManager_;
 };
 } // end namespace Dumux
 
