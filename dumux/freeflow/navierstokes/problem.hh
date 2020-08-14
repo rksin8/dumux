@@ -224,6 +224,17 @@ public:
     }
 
     /*!
+     * \brief Returns a reference pressure at a given sub control volume face.
+     *        This pressure is substracted from the actual pressure for the momentum balance
+     *        which potentially helps to improve numerical accuracy by avoiding issues related do floating point arithmetic.
+     * \note  Overload this for reference pressures other than zero.
+     */
+    Scalar referencePressure(const Element& element,
+                             const FVElementGeometry& fvGeometry,
+                             const SubControlVolumeFace& scvf) const
+    { return 0.0; }
+
+    /*!
      * \brief Returns the density at a given sub control volume face.
      * \note  Overload this if a fixed density shall be prescribed.
      */
