@@ -209,17 +209,19 @@ public:
                     const FVElementGeometry<freeFlowMomentumIdx>& fvGeometry,
                     const SubControlVolumeFace<freeFlowMomentumIdx>& scvf) const
     {
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
-        const auto& scv = (*scvs(momentumCouplingContext_[0].fvGeometry).begin());
+        return this->curSol()[freeFlowMassIdx][fvGeometry.elementIndex()][pressureIdx];
+    }
 
-        if constexpr (!getPropValue<SubDomainTypeTag<freeFlowMomentumIdx>, Properties::NormalizePressure>())
-            return momentumCouplingContext_[0].curElemVolVars[scv].pressure();
-        else
-        {
-            // The call to this->problem() is expensive because of std::weak_ptr (see base class) so we avoid it here.
-            const auto& problem = momentumCouplingContext_[0].curElemVolVars.gridVolVars().problem();
-            return momentumCouplingContext_[0].curElemVolVars[scv].pressure() - problem.initial(element)[pressureIdx];
-        }
+    /*!
+     * \brief Returns the pressure at the center of a sub control volume corresponding to a given sub control volume face.
+     *        This is used for setting a Dirichlet pressure for the mass model when a fixed pressure for the momentum balance is set at another
+     *        boundary. Since the the pressure at the given scvf is solution-dependent and thus unknown a priori, we just use the value
+     *        of the interior cell here.
+     */
+    Scalar cellPressure(const Element<freeFlowMassIdx>& element,
+                        const SubControlVolumeFace<freeFlowMassIdx>& scvf) const
+    {
+        return this->curSol()[freeFlowMassIdx][scvf.insideScvIdx()][pressureIdx];
     }
 
     /*!
