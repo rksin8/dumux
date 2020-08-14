@@ -282,7 +282,8 @@ public:
         if (scvf.isLateral() || scvf.boundary())
             return result;
 
-        const auto pressure = this->problem().pressure(this->element(), this->fvGeometry(), this->scvFace());
+        const auto pressure = this->problem().pressure(this->element(), this->fvGeometry(), this->scvFace())
+                            - this->problem().referencePressure(this->element(), this->fvGeometry(), this->scvFace());
 
         // Account for the orientation of the staggered face's normal outer normal vector
         result += pressure * scvf.directionSign();
