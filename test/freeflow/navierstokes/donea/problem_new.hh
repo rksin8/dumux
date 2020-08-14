@@ -145,16 +145,16 @@ public:
         if constexpr (ParentType::isMomentumProblem())
         {
             NumEqVector source;
-            Scalar x = globalPos[0];
-            Scalar y = globalPos[1];
+            const Scalar x = globalPos[0];
+            const Scalar y = globalPos[1];
 
             source[Indices::momentumXBalanceIdx] = (12.0-24.0*y) * x*x*x*x + (-24.0 + 48.0*y)* x*x*x
-                                                + (-48.0*y + 72.0*y*y - 48.0*y*y*y + 12.0)* x*x
-                                                + (-2.0 + 24.0*y - 72.0*y*y + 48.0*y*y*y)*x
-                                                + 1.0 - 4.0*y + 12.0*y*y - 8.0*y*y*y;
+                                                 + (-48.0*y + 72.0*y*y - 48.0*y*y*y + 12.0)* x*x
+                                                 + (-2.0 + 24.0*y - 72.0*y*y + 48.0*y*y*y)*x
+                                                 + 1.0 - 4.0*y + 12.0*y*y - 8.0*y*y*y;
             source[Indices::momentumYBalanceIdx] = (8.0 - 48.0*y + 48.0*y*y)*x*x*x + (-12.0 + 72.0*y - 72.0*y*y)*x*x
-                                                + (4.0 - 24.0*y + 48.0*y*y - 48.0*y*y*y + 24.0*y*y*y*y)*x - 12.0*y*y
-                                                + 24.0*y*y*y - 12.0*y*y*y*y;
+                                                 + (4.0 - 24.0*y + 48.0*y*y - 48.0*y*y*y + 24.0*y*y*y*y)*x - 12.0*y*y
+                                                 + 24.0*y*y*y - 12.0*y*y*y*y;
             return source;
         }
         else
@@ -185,9 +185,7 @@ public:
             values.setDirichlet(Indices::velocityYIdx);
         }
         else
-        {
             values.setNeumann(Indices::conti0EqIdx);
-        }
 
         return values;
     }
@@ -209,9 +207,9 @@ public:
      */
     PrimaryVariables analyticalSolution(const GlobalPosition& globalPos) const
     {
-        Scalar x = globalPos[0];
-        Scalar y = globalPos[1];
         PrimaryVariables values;
+        const Scalar x = globalPos[0];
+        [[maybe_unused]] const Scalar y = globalPos[1];
 
         if constexpr (ParentType::isMomentumProblem())
         {
@@ -231,16 +229,6 @@ public:
      */
     // \{
 
-   /*!
-     * \brief Evaluates the initial value for a control volume.
-     *
-     * \param globalPos The global position
-     */
-    PrimaryVariables initialAtPos(const GlobalPosition& globalPos) const
-    {
-        return PrimaryVariables(0.0);
-    }
-
     Scalar pressureAtPos(const GlobalPosition& globalPos) const
     {
         const Scalar x = globalPos[0];
@@ -248,9 +236,7 @@ public:
     }
 
     Scalar densityAtPos(const GlobalPosition& globalPos) const
-    {
-        return 1;
-    }
+    { return 1; }
 
     Scalar effectiveViscosityAtPos(const GlobalPosition& globalPos) const
     { return 1; }
