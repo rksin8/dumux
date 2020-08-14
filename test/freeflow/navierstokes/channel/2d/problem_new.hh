@@ -181,7 +181,7 @@ public:
      *
      * \param globalPos The position of the center of the finite volume
      */
-    BoundaryTypes boundaryTypesAtPos(const GlobalPosition &globalPos) const
+    BoundaryTypes boundaryTypesAtPos(const GlobalPosition& globalPos) const
     {
         BoundaryTypes values;
 
@@ -250,105 +250,21 @@ public:
 
         if constexpr (ParentType::isMomentumProblem())
         {
-            // pressure contribution
-            if (scvf.isFrontal())
-            {
-                if (isOutlet_(scvf.center()))
-                    values[scvf.directionIndex()] = outletPressure_ - referencePressure(element, fvGeometry, scvf);
-            }
-
-            // inertial terms
-            if (this->enableInertiaTerms())
-            {
-                if (scvf.isFrontal())
-                    values[Indices::momentumXBalanceIdx] += elemVolVars[scvf.insideScvIdx()].velocity() * elemVolVars[scvf.insideScvIdx()].velocity() * this->density(element, fvGeometry, scvf) * scvf.directionSign();
-
-                else // scvf.isLateral()
-                {
-                    const auto transportingVelocity = [&]()
-                    {
-                        const auto& orthogonalScvf = fvGeometry.lateralOrthogonalScvf(scvf);
-                        const auto innerTransportingVelocity = elemVolVars[orthogonalScvf.insideScvIdx()].velocity();
-
-                        if (scvf.boundary())
-                        {
-                            if (const auto bcTypes = this->boundaryTypes(element, scvf); bcTypes.isDirichlet(scvf.directionIndex()))
-                                return this->dirichlet(element, scvf)[scvf.directionIndex()];
-                            else
-                                return
-                                    innerTransportingVelocity; // fallback
-                        }
-                        else
-                        {
-                            static const bool useOldScheme = getParam<bool>("FreeFlow.UseOldTransportingVelocity", true); // TODO how to deprecate?
-                            if (useOldScheme)
-                                return innerTransportingVelocity;
-                            else
-                            {
-                                // average the transporting velocity by weighting with the scv volumes
-                                const auto insideVolume = fvGeometry.scv(orthogonalScvf.insideScvIdx()).volume();
-                                const auto outsideVolume = fvGeometry.scv(orthogonalScvf.outsideScvIdx()).volume();
-                                const auto outerTransportingVelocity = elemVolVars[orthogonalScvf.outsideScvIdx()].velocity();
-                                return (insideVolume*innerTransportingVelocity + outsideVolume*outerTransportingVelocity) / (insideVolume + outsideVolume);
-                            }
-                        }
-                    }();
-
-                    if (fvGeometry.scv(scvf.insideScvIdx()).boundary())
-                    {
-                        const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
-                        const auto outerVelocity = elemVolVars[scvf.outsideScvIdx()].velocity();
-                        const auto rho = this->getInsideAndOutsideDensity(element, fvGeometry, scvf);
-
-                        const bool selfIsUpstream = scvf.directionSign() == sign(transportingVelocity);
-
-                        const auto insideMomentum = innerVelocity * rho.first;
-                        const auto outsideMomentum = outerVelocity * rho.second;
-
-                        static const auto upwindWeight = getParamFromGroup<Scalar>(this->paramGroup(), "Flux.UpwindWeight");
-
-                        const auto transportedMomentum =  selfIsUpstream ? (upwindWeight * insideMomentum + (1.0 - upwindWeight) * outsideMomentum)
-                                                                         : (upwindWeight * outsideMomentum + (1.0 - upwindWeight) * insideMomentum);
-
-                        values[Indices::momentumYBalanceIdx] += transportingVelocity * transportedMomentum * scvf.directionSign();
-                    }
-                    else
-                    {
-                        const auto insideDensity = this->density(element, fvGeometry.scv(scvf.insideScvIdx()));
-                        const auto innerVelocity = elemVolVars[scvf.insideScvIdx()].velocity();
-                        values[Indices::momentumYBalanceIdx] += innerVelocity * transportingVelocity * insideDensity * scvf.directionSign();
-                    }
-                }
-            }
-
-            // viscous terms
             if (outletCondition_ == OutletCondition::doNothing)
-                values[Indices::momentumYBalanceIdx] = 0;
-            else if (outletCondition_ == OutletCondition::outflow) // TODO put in outflow helper
-            {
-                if (scvf.isLateral() && !fvGeometry.scv(scvf.insideScvIdx()).boundary())
-                {
-                    const auto mu = this->effectiveViscosity(element, fvGeometry, scvf);
-                    values[Indices::momentumYBalanceIdx] -= mu * StaggeredVelocityGradients::velocityGradJI(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
-                }
-
-                if (scvf.isLateral() && fvGeometry.scv(scvf.insideScvIdx()).boundary())
-                {
-                    const auto mu = this->effectiveViscosity(element, fvGeometry, scvf);
-                    values[Indices::momentumYBalanceIdx] -= mu * StaggeredVelocityGradients::velocityGradIJ(fvGeometry, scvf, elemVolVars) * scvf.directionSign();
-                }
-            }
+                values = NavierStokesBoundaryFluxHelper::fixedPressureMomentumFlux(*this, element, fvGeometry, scvf, elemVolVars, elemFluxVarsCache, outletPressure_, false /*zeroNormalVelocityGradient*/);
+            else if (outletCondition_ == OutletCondition::outflow)
+                values = NavierStokesBoundaryFluxHelper::fixedPressureMomentumFlux(*this, element, fvGeometry, scvf, elemVolVars, elemFluxVarsCache, outletPressure_, true /*zeroNormalVelocityGradient*/);
             else
             {
                 assert(outletCondition_ == OutletCondition::neumannXneumannY);
+                values = NavierStokesBoundaryFluxHelper::fixedPressureMomentumFlux(*this, element, fvGeometry, scvf, elemVolVars, elemFluxVarsCache, outletPressure_, false /*zeroNormalVelocityGradient*/);
                 values[Indices::momentumYBalanceIdx] = -dudy(scvf.ipGlobal()[1], inletVelocity_) * this->effectiveViscosity(element, fvGeometry, scvf) * scvf.directionSign();
             }
         }
-
         else
         {
             if (isOutlet_(scvf.ipGlobal()))
-                values[Indices::conti0EqIdx] = NavierStokesBoundaryFluxHelper::outflowFlux(*this, element, fvGeometry, scvf, elemVolVars);
+                values[Indices::conti0EqIdx] = NavierStokesBoundaryFluxHelper::scalarOutflowFlux(*this, element, fvGeometry, scvf, elemVolVars);
         }
 
         return values;
