@@ -179,7 +179,7 @@ public:
         const auto ownCellPressure = pressure(element, fvGeometry, scvf);
         assert (scvf.boundary() && scvf.isFrontal());
 
-        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element);
+        bindCouplingContext(Dune::index_constant<freeFlowMomentumIdx>(), element, fvGeometry.elementIndex());
 
         for (const auto is : intersections(fvGeometry.gridGeometry().gridView(), element))
         {
@@ -194,6 +194,7 @@ public:
                 return ownCellPressure + slope * (element.geometry().center() - scvf.center()).two_norm(); // only works if boundary is on the right
             }
         }
+        DUNE_THROW(Dune::InvalidStateException, "No intersection found");
     }
 
     /*!
