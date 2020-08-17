@@ -386,7 +386,7 @@ private:
         });
 
         // handle cells with a fixed Dirichlet value
-        incorporateDirichletCells_(coefficentMatrixRow);
+//         incorporateDirichletCells_(coefficentMatrixRow);
     }
 
     //! Assembles the residuals and derivatives for the face dofs.
