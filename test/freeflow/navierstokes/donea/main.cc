@@ -89,6 +89,7 @@ int main(int argc, char** argv) try
     SolutionVector x;
     x[GridGeometry::cellCenterIdx()].resize(gridGeometry->numCellCenterDofs());
     x[GridGeometry::faceIdx()].resize(gridGeometry->numFaceDofs());
+    problem->applyInitialSolution(x);
 
     // the grid variables
     using GridVariables = GetPropType<TypeTag, Properties::GridVariables>;
@@ -113,8 +114,8 @@ int main(int argc, char** argv) try
     auto linearSolver = std::make_shared<LinearSolver>();
 
     // the non-linear solver
-    using NewtonSolver = Dumux::NewtonSolver<Assembler, LinearSolver>;
-    NewtonSolver nonLinearSolver(assembler, linearSolver);
+    using NonlinearSolver = Dumux::SimpleSolver<Assembler, LinearSolver, LinearSolver>;
+    NonlinearSolver nonLinearSolver(assembler, linearSolver, linearSolver);
 
     using NewtonConvergenceWriter = StaggeredNewtonConvergenceWriter<GridGeometry, SolutionVector>;
     auto convergenceWriter = std::make_shared<NewtonConvergenceWriter>(*gridGeometry);

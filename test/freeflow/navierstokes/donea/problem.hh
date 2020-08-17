@@ -31,6 +31,7 @@
 #include <dune/grid/yaspgrid.hh>
 
 #include <dumux/discretization/staggered/freeflow/properties.hh>
+#include <dumux/assembly/simpleassemblystructs.hh>
 
 #include <dumux/freeflow/navierstokes/boundarytypes.hh>
 #include <dumux/freeflow/navierstokes/model.hh>
@@ -77,6 +78,17 @@ template<class TypeTag>
 struct EnableGridVolumeVariablesCache<TypeTag, TTag::DoneaTest> { static constexpr bool value = ENABLECACHING; };
 template<class TypeTag>
 struct EnableGridFaceVariablesCache<TypeTag, TTag::DoneaTest> { static constexpr bool value = ENABLECACHING; };
+
+//! Set the SimpleMassBalanceSummands
+template<class TypeTag>
+struct SimpleMassBalanceSummands<TypeTag, TTag::DoneaTest> { using type = MySimpleMassBalanceSummands<GetPropType<TypeTag, Properties::CellCenterPrimaryVariables>, TypeTag>; };
+
+//! Set the SimpleMomentumBalanceSummands
+template<class TypeTag>
+struct SimpleMomentumBalanceSummands<TypeTag, TTag::DoneaTest> { using type = MySimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>; };
+
+template<class TypeTag>
+struct SimpleMomentumBalanceSummandsVector<TypeTag, TTag::DoneaTest> { using type = std::vector<MySimpleMomentumBalanceSummands<GetPropType<TypeTag, Properties::FacePrimaryVariables>, TypeTag>>; };
 }
 
 /*!
@@ -110,6 +122,12 @@ public:
     DoneaTestProblem(std::shared_ptr<const GridGeometry> gridGeometry)
     : ParentType(gridGeometry)
     {
+        using CellArray = std::array<unsigned int, dimWorld>;
+        const CellArray numCells = getParam<CellArray>("Grid.Cells");
+        cellSizeX_ = this->gridGeometry().bBoxMax()[0] / numCells[0];
+        cellSizeY_ = this->gridGeometry().bBoxMax()[1] / numCells[1];
+
+        kinematicViscosity_ = getParam<Scalar>("Component.LiquidKinematicViscosity", 1.0);
         printL2Error_ = getParam<bool>("Problem.PrintL2Error");
         createAnalyticalSolution_();
     }
@@ -156,13 +174,19 @@ public:
         Scalar x = globalPos[0];
         Scalar y = globalPos[1];
 
-        source[Indices::momentumXBalanceIdx] = (12.0-24.0*y) * x*x*x*x + (-24.0 + 48.0*y)* x*x*x
+        source[Indices::momentumXBalanceIdx] = kinematicViscosity_*(
+                                               (12.0-24.0*y) * x*x*x*x + (-24.0 + 48.0*y)* x*x*x
                                              + (-48.0*y + 72.0*y*y - 48.0*y*y*y + 12.0)* x*x
-                                             + (-2.0 + 24.0*y - 72.0*y*y + 48.0*y*y*y)*x
-                                             + 1.0 - 4.0*y + 12.0*y*y - 8.0*y*y*y;
-        source[Indices::momentumYBalanceIdx] = (8.0 - 48.0*y + 48.0*y*y)*x*x*x + (-12.0 + 72.0*y - 72.0*y*y)*x*x
+                                             + (24.0*y - 72.0*y*y + 48.0*y*y*y)*x
+                                             - 4.0*y + 12.0*y*y - 8.0*y*y*y
+                                               )
+                                             - 2.0 * x + 1.0;
+        source[Indices::momentumYBalanceIdx] = kinematicViscosity_*(
+                                               (8.0 - 48.0*y + 48.0*y*y)*x*x*x + (-12.0 + 72.0*y - 72.0*y*y)*x*x
                                              + (4.0 - 24.0*y + 48.0*y*y - 48.0*y*y*y + 24.0*y*y*y*y)*x - 12.0*y*y
-                                             + 24.0*y*y*y - 12.0*y*y*y*y;
+                                             + 24.0*y*y*y - 12.0*y*y*y*y
+                                             );
+
         return source;
     }
     // \}
@@ -202,8 +226,10 @@ public:
                          int pvIdx) const
     {
         bool onBoundary = false;
-        for (const auto& scvf : scvfs(fvGeometry))
-            onBoundary = std::max(onBoundary, scvf.boundary());
+//         for (const auto& scvf : scvfs(fvGeometry))
+//             onBoundary = std::max(onBoundary, scvf.boundary());
+        if (isLowerLeftCell_(scv.center()))
+            onBoundary = true;
         return onBoundary;
     }
 
@@ -250,12 +276,18 @@ public:
      */
     PrimaryVariables initialAtPos(const GlobalPosition& globalPos) const
     {
-        PrimaryVariables values;
-        values[Indices::pressureIdx] = 0.0;
-        values[Indices::velocityXIdx] = 0.0;
-        values[Indices::velocityYIdx] = 0.0;
+        unsigned int initialConditionType = getParamFromGroup<Scalar>("", "InitialCondition.InitialConditionType");
+        if (initialConditionType == 0){
+            PrimaryVariables values;
+            values[Indices::pressureIdx] = 0.0;
+            values[Indices::velocityXIdx] = 0.0;
+            values[Indices::velocityYIdx] = 0.0;
 
-        return values;
+            return values;
+        }
+        else {//else if (initialConditionType == 1)
+            return analyticalSolution(globalPos);
+        }
     }
 
    /*!
@@ -283,6 +315,12 @@ public:
     }
 
 private:
+     bool isLowerLeftCell_(const GlobalPosition& globalPos) const
+    {
+        Scalar eps_ = 1e-6;
+
+        return globalPos[0] < (0.5*cellSizeX_ + eps_) && globalPos[1] < (0.5*cellSizeY_ + eps_);
+    }
 
    /*!
      * \brief Adds additional VTK output data to the VTKWriter. Function is called by the output module on every write.
@@ -325,6 +363,9 @@ private:
     std::vector<Scalar> analyticalPressure_;
     std::vector<VelocityVector> analyticalVelocity_;
     std::vector<VelocityVector> analyticalVelocityOnFace_;
+    Scalar kinematicViscosity_;
+    Scalar cellSizeX_;
+    Scalar cellSizeY_;
 };
 } // end namespace Dumux
 
