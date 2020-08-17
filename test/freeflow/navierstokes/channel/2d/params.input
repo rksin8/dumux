@@ -10,7 +10,6 @@ Cells = 10 5
 Name = test_channel_stokes # name passed to the output routines
 InletVelocity = 1
 EnableGravity = false
-EnableInertiaTerms = false
 OutletCondition = Outflow
 UseVelocityProfile = true
 
