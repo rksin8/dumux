@@ -379,6 +379,8 @@ private:
             const Scalar boundaryMomentum = boundaryVelocity*insideDensity;
 
             simpleMomentumBalanceSummands.RHS -= boundaryMomentum * factor;
+
+            return;
         }
 
         //upwind factors
@@ -410,11 +412,12 @@ private:
         //parallel
         const auto eIdx = lateralFace.outsideScvIdx();
         const auto parallelFace = fvGeometry.scvf(eIdx, scvf.localFaceIdx());
+
         if (parallelFace.boundary() && problem.boundaryTypes(element, parallelFace).isDirichlet(Indices::velocity(scvf.directionIndex()))) {
             simpleMomentumBalanceSummands.RHS -= parallelUpwindFactor*faceVars_.velocityParallel(localSubFaceIdx, 0)*outsideDensity* factor;
         }
         else {
-            simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] += parallelUpwindFactor*faceVars_.velocityParallel(localSubFaceIdx, 0)*outsideDensity* factor;
+            simpleMomentumBalanceSummands.parallelCoefficients[localSubFaceIdx] += parallelUpwindFactor*outsideDensity* factor;
         }
     }
 
